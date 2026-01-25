@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CiLi - Painel de Auditoria Urbana</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #map { height: 500px; border-radius: 12px; }
+        .status-badge { padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: bold; }
+        .status-enviado { background: #DBEAFE; color: #1E40AF; }
+        .status-resolvido { background: #DCFCE7; color: #166534; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans">
+
+<div id="app" class="max-w-6xl mx-auto p-4">
+    <header class="flex justify-between items-center mb-8 py-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-800">CiLi <span class="text-emerald-500 text-sm">PAINEL PÚBLICO</span></h1>
+            <p class="text-slate-500 text-xs font-bold uppercase tracking-widest">Transparência e Fiscalização Cidadã</p>
+        </div>
+        <div class="text-right">
+            <p class="text-xs text-slate-400">Total de Auditorias</p>
+            <p class="text-xl font-black text-slate-700">{{ reports.length }}</p>
+        </div>
+    </header>
+
+    <div class="bg-white p-6 rounded-2xl shadow-sm mb-6 border border-slate-200">
+        <label class="block text-sm font-bold text-slate-700 mb-2">Consultar Protocolo CiLi:</label>
+        <div class="flex gap-2">
+            <input v-model="searchId" placeholder="Ex: CILI-2024..." class="flex-1 border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <button @click="checkProtocol" class="bg-slate-800 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-slate-700">VERIFICAR</button>
+        </div>
+    </div>
+
+    <div class="bg-white p-2 rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+        <div id="map"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<script>
+    const { createApp } = Vue;
+    // CONFIGURAÇÃO SUPABASE
+    const supabase = supabase.createClient('https://ngjuarfnlepwmvzmkukw.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0');
+
+    createApp({
+        data() {
+            return {
+                reports: [],
+                searchId: '',
+                map: null
+            }
+        },
+        async mounted() {
+            this.initMap();
+            await this.loadReports();
+        },
+        methods: {
+            initMap() {
+                this.map = L.map('map').setView([-23.55, -46.63], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
+            },
+            async loadReports() {
+                const { data } = await supabase.from('public_map_reports').select('*');
+                this.reports = data;
+                
+                data.forEach(r => {
+                    L.marker([r.lat, r.lon])
+                     .addTo(this.map)
+                     .bindPopup(`
+                        <div style="font-family: sans-serif">
+                            <b style="font-size: 14px">${r.categoryLabel}</b><br>
+                            <span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span><br>
+                            <small>${new Date(r.createdAt).toLocaleDateString()}</small>
+                        </div>
+                     `);
+                });
+            },
+            async checkProtocol() {
+                if(!this.searchId) return;
+                const { data, error } = await supabase.from('reports').select('*').eq('id', this.searchId).single();
+                if(data) {
+                    alert(`Protocolo Localizado!\nStatus: ${data.status}\nLocal: ${data.addressText}`);
+                } else {
+                    alert("Protocolo não encontrado.");
+                }
+            }
+        }
+    }).mount('#app')
+</script>
+</body>
+</html>
