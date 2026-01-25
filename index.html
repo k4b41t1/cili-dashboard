@@ -7,76 +7,89 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        #map { height: calc(100vh - 180px); width: 100%; border-radius: 12px; z-index: 1; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .category-chip { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
-        .category-chip.active { border-color: #10b981; background: #ecfdf5; }
-        .status-badge { padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
-        /* Cores do Sistema */
-        .status-enviado { background: #fee2e2; color: #991b1b; } /* Vermelho suave */
-        .status-executado { background: #fef3c7; color: #92400e; } /* Laranja */
-        .status-resolvido { background: #dcfce7; color: #166534; } /* Verde */
+        #map { height: calc(100vh - 140px); width: 100%; border-radius: 20px; z-index: 1; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+        .filter-chip { transition: all 0.2s; border: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+        .filter-chip.active { border-color: #10B981; background-color: #F0FDF4; color: #059669; }
+        .status-badge { padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .status-enviado { background: #fee2e2; color: #991b1b; }
+        .status-executado { background: #fef3c7; color: #92400e; }
+        .status-resolvido { background: #dcfce7; color: #166534; }
+        ::-webkit-scrollbar { height: 4px; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans overflow-hidden">
+<body class="bg-slate-50 font-sans text-slate-900 overflow-hidden">
 
 <div id="app">
-    <div v-if="!locationSet" class="modal-overlay">
-        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4">
-            <h2 class="text-2xl font-black text-slate-800 mb-2 text-center">Fiscalização CiLi</h2>
-            <p class="text-slate-500 text-sm mb-6 text-center">Selecione a região para auditoria:</p>
+    <div v-if="!regionSet" class="modal-overlay">
+        <div class="bg-white p-8 rounded-[32px] shadow-2xl max-w-md w-full mx-4 border border-slate-100">
+            <div class="text-center mb-8">
+                <div class="inline-block p-4 bg-emerald-50 rounded-2xl mb-4 text-3xl">🏙️</div>
+                <h2 class="text-2xl font-black text-slate-800 leading-tight">Bem-vindo ao CiLi</h2>
+                <p class="text-slate-500 font-medium">Selecione sua região para visualizar as auditorias públicas.</p>
+            </div>
             
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Estado (UF) *</label>
-                    <input v-model="entry.uf" placeholder="Ex: SP" class="w-full border-2 border-slate-100 rounded-xl px-4 py-3 focus:border-emerald-500 outline-none uppercase">
+            <div class="space-y-5">
+                <div class="flex gap-4">
+                    <div class="w-1/3">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">Estado *</label>
+                        <input v-model="entry.uf" placeholder="UF" maxlength="2" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 focus:border-emerald-500 outline-none uppercase font-bold text-center">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">Cidade *</label>
+                        <input v-model="entry.city" placeholder="Ex: Barretos" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 focus:border-emerald-500 outline-none font-bold">
+                    </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Cidade *</label>
-                    <input v-model="entry.city" placeholder="Ex: Barretos" class="w-full border-2 border-slate-100 rounded-xl px-4 py-3 focus:border-emerald-500 outline-none">
+                    <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">Bairro (Opcional)</label>
+                    <input v-model="entry.neighborhood" placeholder="Ex: Centro" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 focus:border-emerald-500 outline-none font-bold">
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Bairro (Opcional)</label>
-                    <input v-model="entry.neighborhood" placeholder="Ex: Centro" class="w-full border-2 border-slate-100 rounded-xl px-4 py-3 focus:border-emerald-500 outline-none">
-                </div>
-                <button @click="startDashboard" :disabled="!entry.uf || !entry.city" 
-                        class="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition-colors">
-                    ACESSAR MAPA DA CIDADE
+                <button @click="initDashboard" :disabled="!entry.uf || !entry.city" 
+                        class="w-full bg-slate-900 text-white font-black py-5 rounded-[20px] hover:bg-emerald-600 disabled:opacity-30 transition-all shadow-xl shadow-slate-200">
+                    ACESSAR AUDITORIA
                 </button>
             </div>
         </div>
     </div>
 
-    <div class="p-4">
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <div>
-                <h1 class="text-xl font-black text-slate-800 uppercase tracking-tighter">
-                    CiLi <span class="text-emerald-500">Auditoria Urbana</span>
-                </h1>
-                <p class="text-[10px] font-bold text-slate-400 uppercase">{{ entry.city }} - {{ entry.uf }}</p>
+    <main class="h-screen p-4 flex flex-col">
+        <header class="mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-black tracking-tighter uppercase italic">CiLi <span class="text-emerald-500 not-italic">Portal Transparência</span></h1>
+                <div class="bg-white px-4 py-2 rounded-full border border-slate-200 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <span class="text-[10px] font-black text-slate-600 uppercase">{{ entry.city }} / {{ entry.uf }}</span>
+                </div>
             </div>
 
-            <div class="flex flex-wrap gap-2">
-                <select v-model="filters.status" class="bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:border-emerald-500">
-                    <option value="aberto">NÃO RESOLVIDO (EM ABERTO)</option>
-                    <option value="Resolvido">RESOLVIDO</option>
-                </select>
-
-                <div class="flex gap-2 overflow-x-auto pb-2">
-                    <div v-for="cat in categories" 
-                         @click="toggleCategory(cat.label)"
-                         :class="['category-chip flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm', filters.category === cat.label ? 'active' : '']">
-                        <span class="text-sm">{{ cat.icon }}</span>
-                        <span class="text-[10px] font-black uppercase text-slate-600">{{ cat.label }}</span>
-                    </div>
+            <div class="flex flex-col gap-3 bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+                <div class="flex gap-2 overflow-x-auto pb-1">
+                    <button v-for="s in statusOptions" :key="s.val"
+                            @click="filters.status = s.val"
+                            :class="['filter-chip px-5 py-2.5 rounded-full text-[11px] font-black uppercase tracking-tight shadow-sm bg-slate-50 text-slate-500', filters.status === s.val ? 'active' : '']">
+                        {{ s.label }}
+                    </button>
+                </div>
+                <div class="h-[1px] bg-slate-50 w-full"></div>
+                <div class="flex gap-2 overflow-x-auto pb-1">
+                    <button @click="filters.category = null" 
+                            :class="['filter-chip px-5 py-2.5 rounded-full text-[11px] font-black uppercase bg-slate-50 text-slate-500', !filters.category ? 'active' : '']">
+                        Todas
+                    </button>
+                    <button v-for="cat in categories" :key="cat.label"
+                            @click="filters.category = cat.label"
+                            :class="['filter-chip px-5 py-2.5 rounded-full text-[11px] font-black uppercase flex items-center gap-2 bg-slate-50 text-slate-500', filters.category === cat.label ? 'active' : '']">
+                        <span>{{ cat.icon }}</span> {{ cat.label }}
+                    </button>
                 </div>
             </div>
         </header>
 
-        <div class="bg-white p-1 rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+        <div class="relative flex-1 bg-white p-2 rounded-[32px] shadow-inner border border-slate-100">
             <div id="map"></div>
         </div>
-    </div>
+    </main>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -85,94 +98,102 @@
 
 <script>
     const { createApp } = Vue;
+    // IMPORTANTE: Insira sua URL e Chave ANON real aqui
     const supabaseClient = supabase.createClient('https://ngjuarfnlepwmvzmkukw.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0');
 
     createApp({
         data() {
             return {
-                locationSet: false,
+                regionSet: false,
                 entry: { uf: '', city: '', neighborhood: '' },
                 reports: [],
                 map: null,
-                markers: [],
+                markerGroup: null,
                 filters: { status: 'aberto', category: null },
+                statusOptions: [
+                    { label: '🔴 Não Resolvido', val: 'aberto' },
+                    { label: '✅ Resolvido', val: 'Resolvido' }
+                ],
+                // Categorias extraídas do seu template REPORT_CATEGORIES
                 categories: [
-                    { label: 'Buraco', icon: '🕳️' },
-                    { label: 'Lixo', icon: '🗑️' },
-                    { label: 'Iluminação', icon: '💡' },
-                    { label: 'Mato Alto', icon: '🌱' },
-                    { label: 'Água/Esgoto', icon: '💧' }
+                    { label: 'Água e Esgoto', icon: '💧' },
+                    { label: 'Animais', icon: '🐾' },
+                    { label: 'Buracos e Vias', icon: '🛣️' },
+                    { label: 'Calçadas e Passeios', icon: '🚶' },
+                    { label: 'Iluminação Pública', icon: '💡' },
+                    { label: 'Lixo e Entulho', icon: '🗑️' },
+                    { label: 'Mato e Limpeza Urbana', icon: '🌿' },
+                    { label: 'Obras Irregulares', icon: '🏗️' },
+                    { label: 'Postes e Fiação', icon: '🔌' },
+                    { label: 'Sinalização Viária', icon: '🚦' },
+                    { label: 'Terrenos Baldios', icon: '🏚️' },
+                    { label: 'Vandalismo', icon: '🎭' }
                 ]
             }
         },
         watch: {
-            'filters.status': 'loadReports',
-            'filters.category': 'loadReports'
+            filters: { deep: true, handler: 'loadReports' }
         },
         methods: {
-            async startDashboard() {
-                this.locationSet = true;
+            initDashboard() {
+                this.regionSet = true;
                 this.$nextTick(() => {
                     this.initMap();
                     this.loadReports();
                 });
             },
             initMap() {
-                this.map = L.map('map').setView([-23.55, -46.63], 13);
+                this.map = L.map('map', { zoomControl: false }).setView([0, 0], 2);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
-                
-                // Geocodificação simples: Tenta centralizar na cidade
-                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${this.entry.city},${this.entry.uf},Brazil`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if(data[0]) this.map.setView([data[0].lat, data[0].lon], 14);
-                    });
-            },
-            toggleCategory(label) {
-                this.filters.category = this.filters.category === label ? null : label;
+                this.markerGroup = L.featureGroup().addTo(this.map);
             },
             async loadReports() {
-                this.markers.forEach(m => this.map.removeLayer(m));
-                this.markers = [];
+                this.markerGroup.clearLayers();
 
                 let query = supabaseClient.from('public_map_reports').select('*');
                 
-                // Lógica de Filtro 1 (Status)
+                // Filtro 1: Status
                 if(this.filters.status === 'aberto') {
                     query = query.in('status', ['Enviado', 'Executado']);
                 } else {
                     query = query.eq('status', 'Resolvido');
                 }
 
-                // Lógica de Filtro 2 (Categoria)
+                // Filtro 2: Categorias
                 if(this.filters.category) {
                     query = query.eq('categoryLabel', this.filters.category);
                 }
 
-                // Filtro de Localidade (Cidade)
-                query = query.ilike('city', `%${this.entry.city}%`);
+                // Filtro Obrigatório: Localidade
+                query = query.ilike('city', `%${this.entry.city.trim()}%`);
 
                 const { data } = await query;
-                this.reports = data || [];
+                if (!data || data.length === 0) return;
 
-                this.reports.forEach(r => {
-                    const marker = L.marker([r.lat, r.lon]).addTo(this.map);
+                data.forEach(r => {
+                    const marker = L.marker([Number(r.lat), Number(r.lon)]);
                     marker.bindPopup(`
-                        <div class="p-2">
-                            <b class="text-slate-800">${r.categoryLabel}</b><br>
+                        <div class="p-3 text-slate-800">
+                            <p class="text-[10px] font-black text-slate-400 uppercase mb-1">${r.createdAt}</p>
+                            <h3 class="font-black text-sm mb-2">${r.categoryLabel}</h3>
                             <span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span>
-                            <hr class="my-2">
-                            <button onclick="window.app.openAdmin('${r.id}')" class="w-full bg-slate-800 text-white text-[10px] py-1 rounded">GESTOR</button>
+                            <div class="mt-4 pt-3 border-t border-slate-100">
+                                <button onclick="window.app.openAdmin('${r.id}')" class="w-full bg-slate-900 text-white text-[10px] font-black py-2 rounded-xl">GESTOR</button>
+                            </div>
                         </div>
-                    `);
-                    this.markers.push(marker);
+                    `, { borderRadius: 16 });
+                    this.markerGroup.addLayer(marker);
                 });
+
+                // REQUISITO: Cobrir todos os PINs existentes no município
+                if(data.length > 0) {
+                    this.map.fitBounds(this.markerGroup.getBounds(), { padding: [50, 50] });
+                }
             },
             async openAdmin(id) {
-                // ... (mesma lógica de senha que você já tem)
-                const pass = prompt("Senha Gestor:");
+                const pass = prompt("Chave de Segurança Gestor:");
                 if(pass === "CILI123") {
-                    const res = confirm("Marcar como RESOLVIDO?");
+                    const res = confirm("Deseja confirmar a resolução deste problema?");
                     if(res) {
                         await supabaseClient.from('reports').update({ status: 'Resolvido' }).eq('id', id);
                         this.loadReports();
@@ -181,6 +202,7 @@
             }
         }
     }).mount('#app');
+    window.app = app;
 </script>
 </body>
 </html>
