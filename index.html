@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CiLi - Painel de Auditoria Urbana</title>
+    <title>CiLi - Painel de Monitoramento</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,123 +13,112 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        #map { height: 100%; min-height: 500px; border-radius: 16px; z-index: 1; }
-        .status-badge { padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        .status-aberto { background: #DBEAFE; color: #1E40AF; }
-        .status-resolvido { background: #DCFCE7; color: #166534; }
-        .status-nao_resolvido { background: #FEE2E2; color: #991B1B; }
+        body, html { height: 100%; margin: 0; font-family: 'Inter', sans-serif; overflow: hidden; }
+        #app { height: 100vh; display: flex; flex-direction: column; }
         
-        /* Ajuste de responsividade total */
-        .main-container { min-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+        /* Layout Full Screen */
+        .main-content { flex: 1; display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; overflow: hidden; }
+        #map { height: 100%; width: 100%; border-radius: 24px; z-index: 1; }
         
-        /* Estilização do Marcador Customizado (Cores do App) */
-        .custom-pin {
-            background-color: #10B981;
-            border: 3px solid white;
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            width: 30px !important;
-            height: 30px !important;
-        }
+        /* Scroll apenas interno */
+        .sidebar { background: white; border-radius: 24px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+        .category-scroll { flex: 1; overflow-y: auto; padding: 10px; }
+
+        /* Pins Customizados */
+        .pin-resolvido { background: #10B981; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); width: 28px !important; height: 28px !important; }
+        .pin-aberto { background: #3B82F6; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); width: 28px !important; height: 28px !important; }
+
+        /* Card Estilo Instagram (Popup) */
+        .leaflet-popup-content-wrapper { border-radius: 20px; padding: 0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+        .leaflet-popup-content { margin: 0 !important; width: 260px !important; }
+        .insta-card-img { width: 100%; height: 260px; object-cover: cover; background: #f1f5f9; }
+        
+        /* Filtros Ativos nos Cards */
+        .stat-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .stat-card.active { border-color: #10B981; background: #f0fdf4; }
 
         [v-cloak] { display: none; }
-
-        /* Card do App dentro do Mapa */
-        .leaflet-popup-content-wrapper { border-radius: 16px; padding: 0; overflow: hidden; }
-        .leaflet-popup-content { margin: 0; width: 280px !important; }
     </style>
 </head>
 <body class="bg-slate-50">
 
-<div id="app" v-cloak class="p-4 md:p-8">
-    <div v-if="!isLoggedIn" class="min-h-screen flex items-center justify-center">
-        <div class="bg-white p-10 rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md text-center">
-            <div class="mb-6 flex justify-center">
-                <div class="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
-                    <span class="text-white text-3xl font-black">Ci</span>
-                </div>
-            </div>
-            <h1 class="text-3xl font-black text-slate-800 mb-2">CiLi</h1>
-            <p class="text-slate-400 font-bold text-xs uppercase tracking-widest mb-8">Gestão de Auditoria Urbana</p>
-            
-            <div class="space-y-4 text-left">
-                <input v-model="loginForm.email" type="email" placeholder="E-mail" class="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition">
-                <input v-model="loginForm.pass" @keyup.enter="handleLogin" type="password" placeholder="Senha" class="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition">
-                <button @click="handleLogin" :disabled="loading" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-black hover:bg-slate-700 transition transform active:scale-95 disabled:opacity-50">
-                    {{ loading ? 'AUTENTICANDO...' : 'ENTRAR NO PAINEL' }}
+<div id="app" v-cloak>
+    <div v-if="!isLoggedIn" class="h-full flex items-center justify-center">
+        <div class="bg-white p-10 rounded-[32px] shadow-2xl w-full max-w-md text-center border border-slate-100">
+            <img src="https://i.ibb.co/m5YnQ4M/logo-cili.png" alt="CiLi Logo" class="h-20 mx-auto mb-6">
+            <h2 class="text-2xl font-black text-slate-800 mb-8">Acesse o Painel</h2>
+            <div class="space-y-4">
+                <input v-model="loginForm.email" type="email" placeholder="E-mail" class="w-full px-5 py-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500">
+                <input v-model="loginForm.pass" @keyup.enter="handleLogin" type="password" placeholder="Senha" class="w-full px-5 py-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500">
+                <button @click="handleLogin" :disabled="loading" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold">
+                    {{ loading ? 'ENTRANDO...' : 'ENTRAR' }}
                 </button>
             </div>
         </div>
     </div>
 
-    <div v-else class="main-container max-w-[1600px] mx-auto">
-        <header class="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
+    <template v-else>
+        <header class="px-8 py-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0">
             <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-100">
-                    <span class="text-white text-xl font-black">Ci</span>
-                </div>
-                <div>
-                    <h1 class="text-2xl font-black text-slate-800 leading-tight">CiLi <span class="text-emerald-500 text-xs font-bold px-2 py-1 bg-emerald-50 rounded-lg ml-2">BARRETOS</span></h1>
-                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-[3px]">Painel de Monitoramento</p>
-                </div>
+                <img src="https://i.ibb.co/m5YnQ4M/logo-cili.png" alt="Logo" class="h-10">
+                <div class="h-8 w-[1px] bg-slate-200"></div>
+                <h1 class="font-black text-slate-800 tracking-tight text-xl">MONITORAMENTO <span class="text-emerald-500">BARRETOS</span></h1>
             </div>
 
-            <div class="flex flex-wrap gap-3 items-center">
-                <div class="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
-                    <input v-model="searchId" type="text" placeholder="Protocolo (Ex: CILI-123)" class="px-4 py-2 bg-transparent text-sm outline-none w-48 font-bold">
-                    <button @click="checkProtocol" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-700 transition">BUSCAR</button>
+            <div class="flex items-center gap-6">
+                <div class="flex gap-4">
+                    <div @click="statusFilter = 'all'" :class="['stat-card px-4 py-2 rounded-xl bg-slate-100', statusFilter === 'all' ? 'active' : '']">
+                        <p class="text-[9px] font-black text-slate-400 uppercase">Total</p>
+                        <p class="text-lg font-black leading-none">{{ reports.length }}</p>
+                    </div>
+                    <div @click="statusFilter = 'resolvido'" :class="['stat-card px-4 py-2 rounded-xl bg-emerald-50', statusFilter === 'resolvido' ? 'active' : '']">
+                        <p class="text-[9px] font-black text-emerald-600 uppercase">Resolvidos</p>
+                        <p class="text-lg font-black text-emerald-600 leading-none">{{ stats.resolvidos }}</p>
+                    </div>
+                    <div @click="statusFilter = 'aberto'" :class="['stat-card px-4 py-2 rounded-xl bg-blue-50', statusFilter === 'aberto' ? 'active' : '']">
+                        <p class="text-[9px] font-black text-blue-600 uppercase">Em Aberto</p>
+                        <p class="text-lg font-black text-blue-600 leading-none">{{ stats.abertos }}</p>
+                    </div>
                 </div>
-                <button @click="handleLogout" class="bg-white p-3 rounded-2xl border border-slate-200 text-slate-400 hover:text-red-500 transition shadow-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                </button>
+                <button @click="handleLogout" class="text-slate-400 hover:text-red-500"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
             </div>
         </header>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-            <div v-for="(val, label) in stats" :key="label" class="bg-white p-6 rounded-[24px] shadow-sm border border-slate-100">
-                <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{{ label }}</p>
-                <h2 class="text-4xl font-black text-slate-800">{{ val }}</h2>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
-            <aside class="lg:col-span-1">
-                <div class="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden">
-                    <div class="p-5 border-bottom border-slate-50">
-                        <h3 class="font-black text-slate-800 text-sm uppercase tracking-wider">Categorias</h3>
-                    </div>
-                    <div class="p-2 space-y-1 overflow-y-auto max-h-[500px]">
-                        <button @click="filterCategory = 'all'" :class="filterCategory === 'all' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center px-4 py-4 rounded-2xl transition group">
-                            <span class="font-bold text-sm">Todas as Ocorrências</span>
-                        </button>
-                        
-                        <button v-for="(icon, id) in categoryConfig" :key="id" 
-                            @click="filterCategory = id" 
-                            :class="filterCategory === id ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' : 'text-slate-600 hover:bg-slate-50'"
-                            class="w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition">
-                            <div :class="filterCategory === id ? 'bg-white/20' : 'bg-emerald-50'" class="w-10 h-10 rounded-xl flex items-center justify-center">
-                                <span class="text-lg">{{ getEmoji(id) }}</span>
-                            </div>
-                            <span class="font-bold text-sm text-left flex-1">{{ getLabel(id) }}</span>
-                        </button>
-                    </div>
+        <main class="main-content">
+            <aside class="sidebar">
+                <div class="p-5 border-b border-slate-100 bg-white">
+                    <h3 class="font-black text-slate-800 text-xs uppercase tracking-widest">Filtrar Categoria</h3>
+                </div>
+                <div class="category-scroll">
+                    <button @click="filterCategory = 'all'" :class="filterCategory === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center px-4 py-4 rounded-2xl transition mb-2">
+                        <span class="font-bold text-sm">Todas as ocorrências</span>
+                    </button>
+                    
+                    <button v-for="(label, id) in categoryConfig" :key="id" 
+                        @click="filterCategory = id" 
+                        :class="filterCategory === id ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' : 'text-slate-600 hover:bg-slate-50'"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition mb-1">
+                        <div :class="filterCategory === id ? 'bg-white/20' : 'bg-emerald-50'" class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0">
+                            <span class="text-lg">{{ getEmoji(id) }}</span>
+                        </div>
+                        <span class="font-bold text-[13px] text-left leading-tight">{{ label }}</span>
+                    </button>
                 </div>
             </aside>
 
-            <section class="lg:col-span-3 flex flex-col">
-                <div class="bg-white p-2 rounded-[32px] shadow-sm border border-slate-200 flex-1 min-h-[600px]">
-                    <div id="map"></div>
+            <section class="relative">
+                <div id="map"></div>
+                <div class="absolute top-4 left-4 z-[1000] bg-white p-2 rounded-2xl shadow-xl flex border border-slate-200">
+                    <input v-model="searchId" type="text" placeholder="Buscar Protocolo..." class="px-4 py-2 text-sm outline-none w-48 font-bold">
+                    <button @click="checkProtocol" class="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black">BUSCAR</button>
                 </div>
             </section>
-        </div>
-    </div>
+        </main>
+    </template>
 </div>
 
 <script>
     const { createApp } = Vue;
-
-    // Configurações do Supabase
     const _supabase = supabase.createClient('https://ngjuarfnlepwmvzmkukw.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0');
 
     createApp({
@@ -142,8 +131,8 @@
                 reports: [],
                 markers: [],
                 filterCategory: 'all',
+                statusFilter: 'all',
                 searchId: '',
-                // Mapeamento vindo do seu código do App
                 categoryConfig: {
                     "pavi_vias": "Pavimentação e Vias",
                     "limpeza_urbana": "Limpeza Urbana",
@@ -160,14 +149,16 @@
         },
         computed: {
             filteredReports() {
-                if (this.filterCategory === 'all') return this.reports;
-                return this.reports.filter(r => r.categoryId === this.filterCategory);
+                let filtered = this.reports;
+                if (this.filterCategory !== 'all') filtered = filtered.filter(r => r.categoryId === this.filterCategory);
+                if (this.statusFilter === 'resolvido') filtered = filtered.filter(r => r.status === 'resolvido');
+                if (this.statusFilter === 'aberto') filtered = filtered.filter(r => r.status !== 'resolvido');
+                return filtered;
             },
             stats() {
                 return {
-                    "Total": this.reports.length,
-                    "Resolvidos": this.reports.filter(r => r.status === 'resolvido').length,
-                    "Em Aberto": this.reports.filter(r => r.status !== 'resolvido').length
+                    resolvidos: this.reports.filter(r => r.status === 'resolvido').length,
+                    abertos: this.reports.filter(r => r.status !== 'resolvido').length
                 }
             }
         },
@@ -180,65 +171,56 @@
         },
         methods: {
             getEmoji(id) {
-                const emojimap = { "pavi_vias": "🚧", "limpeza_urbana": "🧹", "ilum_pub": "💡", "sinal_transito": "🚥", "areas_verdes": "🌳", "poluicao_amb": "🌫️", "saneamento": "💧", "mobilidade_urb": "🚲", "equip_pub": "🏫", "seg_pub": "🛡️" };
-                return emojimap[id] || "📍";
+                const map = { "pavi_vias": "🚧", "limpeza_urbana": "🧹", "ilum_pub": "💡", "sinal_transito": "🚥", "areas_verdes": "🌳", "poluicao_amb": "🌫️", "saneamento": "💧", "mobilidade_urb": "🚲", "equip_pub": "🏫", "seg_pub": "🛡️" };
+                return map[id] || "📍";
             },
-            getLabel(id) { return this.categoryConfig[id] || id; },
-
             async handleLogin() {
                 this.loading = true;
                 const { error } = await _supabase.auth.signInWithPassword({ email: this.loginForm.email, password: this.loginForm.pass });
-                if (error) { alert("Acesso negado"); this.loading = false; }
+                if (error) { alert("Credenciais inválidas"); this.loading = false; }
                 else { this.isLoggedIn = true; this.$nextTick(() => this.initApp()); }
             },
-
-            async handleLogout() { await _supabase.auth.signOut(); location.reload(); },
-
+            handleLogout() { _supabase.auth.signOut(); location.reload(); },
             initApp() { this.initMap(); this.loadReports(); this.setupRealtime(); },
-
             initMap() {
                 if (this.map) return;
-                // Focado em Barretos - Ajuste fino de zoom
                 this.map = L.map('map', { zoomControl: false }).setView([-20.557, -48.567], 14);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                    attribution: 'CiLi'
-                }).addTo(this.map);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(this.map);
                 L.control.zoom({ position: 'bottomright' }).addTo(this.map);
             },
-
             async loadReports() {
                 const { data } = await _supabase.from('public_map_reports').select('*');
                 if (data) { this.reports = data; this.renderMarkers(); }
             },
-
             renderMarkers() {
                 if (!this.map) return;
                 this.markers.forEach(m => this.map.removeLayer(m));
                 this.markers = [];
 
                 this.filteredReports.forEach(r => {
-                    // Ícone customizado CORRIGIDO (Ancorado ao mapa)
-                    const customIcon = L.divIcon({
-                        className: 'custom-pin-container',
-                        html: `<div class="custom-pin" style="background-color: ${r.status === 'resolvido' ? '#10B981' : '#3B82F6'}"></div>`,
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 30] // Garante que a ponta do PIN esteja na coordenada
+                    const iconClass = r.status === 'resolvido' ? 'pin-resolvido' : 'pin-aberto';
+                    const icon = L.divIcon({
+                        className: 'custom-container',
+                        html: `<div class="${iconClass}"></div>`,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 28]
                     });
 
-                    const marker = L.marker([r.lat, r.lon], { icon: customIcon }).addTo(this.map);
+                    const marker = L.marker([r.lat, r.lon], { icon }).addTo(this.map);
                     
-                    // Popup estilo "Card do App"
                     marker.bindPopup(`
-                        <div class="rounded-2xl overflow-hidden">
-                            ${r.image_url ? `<img src="${r.image_url}" class="w-full h-32 object-cover">` : '<div class="h-2 bg-emerald-500"></div>'}
+                        <div class="insta-card">
+                            <img src="${r.image_url || 'https://via.placeholder.com/300'}" class="insta-card-img">
                             <div class="p-4">
-                                <span class="status-badge status-${(r.status || 'aberto').toLowerCase()}">${r.status || 'Aberto'}</span>
-                                <h4 class="font-black text-slate-800 mt-2 text-lg">${r.categoryLabel}</h4>
-                                <p class="text-slate-500 text-xs font-bold uppercase mt-1">ID: ${r.id}</p>
-                                <hr class="my-3 border-slate-100">
-                                <div class="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="w-2 h-2 rounded-full ${r.status === 'resolvido' ? 'bg-emerald-500' : 'bg-blue-500'}"></div>
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${r.status || 'Aberto'}</span>
+                                </div>
+                                <h4 class="font-black text-slate-800 text-base leading-tight">${r.categoryLabel}</h4>
+                                <p class="text-slate-400 text-[10px] mt-1 font-bold">PROTOCOLO: ${r.id}</p>
+                                <div class="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                     <span>${new Date(r.createdAt).toLocaleDateString()}</span>
-                                    <span>BARRETOS-SP</span>
+                                    <span class="text-emerald-500">Barretos/SP</span>
                                 </div>
                             </div>
                         </div>
@@ -246,25 +228,14 @@
                     this.markers.push(marker);
                 });
             },
-
             setupRealtime() {
-                _supabase.channel('db-ui').on('postgres_changes', { event: '*', schema: 'public', table: 'public_map_reports' }, () => this.loadReports()).subscribe();
+                _supabase.channel('db').on('postgres_changes', { event: '*', schema: 'public', table: 'public_map_reports' }, () => this.loadReports()).subscribe();
             },
-
             async checkProtocol() {
                 if(!this.searchId) return;
-                // Busca inteligente: tenta pelo ID curto ou ID longo
-                const cleanId = this.searchId.toUpperCase().trim();
-                const { data } = await _supabase.from('reports')
-                    .select('*')
-                    .or(`id.eq.${cleanId},id.ilike.%${cleanId}%`)
-                    .single();
-
-                if(data) {
-                    alert(`✅ Protocolo Encontrado!\n\nStatus: ${data.status.toUpperCase()}\nCategoria: ${data.category_label}\nData: ${new Date(data.created_at).toLocaleString()}`);
-                } else {
-                    alert("❌ Protocolo não localizado. Verifique se digitou corretamente (Ex: CILI-...)");
-                }
+                const { data } = await _supabase.from('reports').select('*').ilike('id', `%${this.searchId}%`).single();
+                if(data) alert(`✅ Encontrado!\nStatus: ${data.status}\nCategoria: ${data.category_label}`);
+                else alert("❌ Não localizado.");
             }
         }
     }).mount('#app')
