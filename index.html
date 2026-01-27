@@ -14,27 +14,74 @@
         .status-aberto { background: #DBEAFE; color: #1E40AF; }
         .status-resolvido { background: #DCFCE7; color: #166534; }
         .status-nao_resolvido { background: #FEE2E2; color: #991B1B; }
+        [v-cloak] { display: none; }
     </style>
 </head>
 <body class="bg-slate-50 font-sans">
 
-<div id="app" class="max-w-6xl mx-auto p-4">
-    <header class="flex justify-between items-center mb-8 py-4">
-        <div>
-            <h1 class="text-2xl font-black text-slate-800">CiLi <span class="text-emerald-500 text-sm">PAINEL PÚBLICO</span></h1>
-            <p class="text-slate-500 text-xs font-bold uppercase tracking-widest">Barretos - SP</p>
+<div id="app" v-cloak>
+    <div v-if="!isLoggedIn" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-black text-slate-800">CiLi</h1>
+                <p class="text-slate-500 text-sm font-bold uppercase tracking-widest">Painel Administrativo</p>
+            </div>
+            <div class="space-y-4">
+                <input v-model="loginForm.user" type="text" placeholder="Usuário" class="w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                <input v-model="loginForm.pass" type="password" placeholder="Senha" class="w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                <button @click="handleLogin" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Entrar</button>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <input v-model="searchId" type="text" placeholder="Protocolo..." class="px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-            <button @click="checkProtocol" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Buscar</button>
-        </div>
-    </header>
+    </div>
 
-    <main class="grid grid-cols-1 gap-6">
-        <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
-            <div id="map"></div>
+    <div v-else class="max-w-6xl mx-auto p-4">
+        <header class="flex justify-between items-center mb-8 py-4">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800">CiLi <span class="text-emerald-500 text-sm">PAINEL PÚBLICO</span></h1>
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest">Barretos - SP</p>
+            </div>
+            <div class="flex gap-4 items-center">
+                <div class="flex gap-2">
+                    <input v-model="searchId" type="text" placeholder="Protocolo..." class="px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                    <button @click="checkProtocol" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Buscar</button>
+                </div>
+                <button @click="isLoggedIn = false" class="text-slate-400 hover:text-red-500"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <p class="text-slate-500 text-xs font-bold uppercase">Total de Relatos</p>
+                <h2 class="text-3xl font-black text-slate-800">{{ reports.length }}</h2>
+            </div>
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <p class="text-slate-500 text-xs font-bold uppercase text-emerald-600">Resolvidos</p>
+                <h2 class="text-3xl font-black text-emerald-600">{{ solvedCount }}</h2>
+            </div>
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <p class="text-slate-500 text-xs font-bold uppercase text-blue-600">Em Aberto</p>
+                <h2 class="text-3xl font-black text-blue-600">{{ openCount }}</h2>
+            </div>
         </div>
-    </main>
+
+        <main class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div class="lg:col-span-1 space-y-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="font-bold text-slate-800 mb-4">Categorias</h3>
+                    <div class="space-y-2">
+                        <button @click="filterCategory = 'all'" :class="filterCategory === 'all' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'text-slate-600 border-transparent'" class="w-full text-left px-3 py-2 rounded-lg border text-sm font-medium transition">Todas</button>
+                        <button v-for="cat in uniqueCategories" @click="filterCategory = cat" :class="filterCategory === cat ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'text-slate-600 border-transparent'" class="w-full text-left px-3 py-2 rounded-lg border text-sm font-medium transition">{{ cat }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3">
+                <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </main>
+    </div>
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -43,84 +90,110 @@
 
 <script>
     const { createApp } = Vue;
-    const supabase = Object.assign(supabase.createClient('https://ngjuarfnlepwmvzmkukw.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0'));
+    // CONFIGURAÇÃO SUPABASE
+    const supabaseUrl = 'https://ngjuarfnlepwmvzmkukw.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0';
+    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
     createApp({
         data() {
             return {
+                isLoggedIn: false,
+                loginForm: { user: '', pass: '' },
                 map: null,
                 reports: [],
+                markers: [],
+                filterCategory: 'all',
                 searchId: '',
-                markers: []
             }
         },
+        computed: {
+            uniqueCategories() {
+                const cats = this.reports.map(r => r.categoryLabel).filter(Boolean);
+                return [...new Set(cats)];
+            },
+            filteredReports() {
+                if (this.filterCategory === 'all') return this.reports;
+                return this.reports.filter(r => r.categoryLabel === this.filterCategory);
+            },
+            solvedCount() { return this.reports.filter(r => r.status === 'resolvido').length },
+            openCount() { return this.reports.filter(r => r.status !== 'resolvido').length }
+        },
+        watch: {
+            // Re-renderiza marcadores quando o filtro muda
+            filterCategory() { this.renderMarkers(); }
+        },
         mounted() {
-            this.initMap();
-            this.loadReports();
-            this.setupRealtime(); // Ativa a atualização automática
+            // Verifica se já estava logado nesta sessão (opcional)
+            const savedLogin = sessionStorage.getItem('cili_auth');
+            if(savedLogin) {
+                this.isLoggedIn = true;
+                this.$nextTick(() => { this.initApp(); });
+            }
         },
         methods: {
-            initMap() {
-                // Focado em Barretos
-                this.map = L.map('map').setView([-20.557, -48.567], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
-                }).addTo(this.map);
+            handleLogin() {
+                if(this.loginForm.user === 'admin' && this.loginForm.pass === '123') {
+                    this.isLoggedIn = true;
+                    sessionStorage.setItem('cili_auth', 'true');
+                    this.$nextTick(() => { this.initApp(); });
+                } else {
+                    alert("Dados inválidos");
+                }
             },
-
+            initApp() {
+                this.initMap();
+                this.loadReports();
+                this.setupRealtime();
+            },
+            initMap() {
+                if (this.map) return;
+                this.map = L.map('map').setView([-20.557, -48.567], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
+            },
             async loadReports() {
-                const { data, error } = await supabase
-                    .from('public_map_reports')
-                    .select('*');
-
-                if (error) return console.error(error);
-                
-                // Limpa marcadores existentes para não duplicar no reload
+                const { data, error } = await _supabase.from('public_map_reports').select('*');
+                if (!error) {
+                    this.reports = data;
+                    this.renderMarkers();
+                }
+            },
+            renderMarkers() {
+                if(!this.map) return;
+                // Remove marcadores antigos
                 this.markers.forEach(m => this.map.removeLayer(m));
                 this.markers = [];
 
-                data.forEach(r => {
+                // Adiciona os filtrados
+                this.filteredReports.forEach(r => {
                     const marker = L.marker([r.lat, r.lon])
-                     .addTo(this.map)
-                     .bindPopup(`
-                        <div style="font-family: sans-serif; min-width: 150px">
-                            <b style="font-size: 14px; color: #1e293b">${r.categoryLabel}</b><br>
-                            <div style="margin: 8px 0">
-                                <span class="status-badge status-${(r.status || 'aberto').toLowerCase()}">${r.status || 'Aberto'}</span>
+                        .addTo(this.map)
+                        .bindPopup(`
+                            <div style="min-width:160px">
+                                <b style="font-size:14px">${r.categoryLabel}</b><br>
+                                <div style="margin:5px 0">
+                                    <span class="status-badge status-${(r.status || 'aberto').toLowerCase()}">${r.status || 'Aberto'}</span>
+                                </div>
+                                <small style="color:#666">${new Date(r.createdAt).toLocaleString('pt-BR')}</small>
+                                ${r.image_url ? `<br><img src="${r.image_url}" style="width:100%; border-radius:8px; margin-top:8px">` : ''}
                             </div>
-                            <small style="color: #64748b">${new Date(r.createdAt).toLocaleDateString('pt-BR')} às ${new Date(r.createdAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</small>
-                        </div>
-                     `);
+                        `);
                     this.markers.push(marker);
                 });
             },
-
             setupRealtime() {
-                // Escuta inserções e atualizações na tabela pública
-                supabase
-                    .channel('map-updates')
-                    .on('postgres_changes', 
-                        { event: '*', schema: 'public', table: 'public_map_reports' }, 
-                        (payload) => {
-                            console.log("Mudança detectada no banco:", payload);
-                            this.loadReports(); 
-                        }
-                    )
-                    .subscribe();
+                _supabase.channel('map-changes')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'public_map_reports' }, () => {
+                        this.loadReports();
+                    }).subscribe();
             },
-
             async checkProtocol() {
                 if(!this.searchId) return;
-                const { data, error } = await supabase
-                    .from('reports') // Busca na tabela principal para mais detalhes
-                    .select('*')
-                    .eq('id', this.searchId)
-                    .single();
-
+                const { data } = await _supabase.from('reports').select('*').eq('id', this.searchId).single();
                 if(data) {
-                    alert(`Protocolo: ${data.id}\nStatus: ${data.status}\nCategoria: ${data.category_label}\nData: ${new Date(data.created_at).toLocaleDateString()}`);
+                    alert(`Protocolo: ${data.id}\nStatus: ${data.status}\nLocal: ${data.address_text || 'Não informado'}`);
                 } else {
-                    alert("Protocolo não encontrado ou ainda processando.");
+                    alert("Protocolo não localizado.");
                 }
             }
         }
