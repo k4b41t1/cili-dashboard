@@ -1,260 +1,738 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Acompanhamento CiLi</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
-
-    <style>
-        body, html { height: 100%; margin: 0; font-family: 'Inter', sans-serif; overflow: hidden; }
-        #app { height: 100vh; display: flex; flex-direction: column; }
-        
-        /* Layout Full Screen - Sem Scroll na página principal */
-        .main-content { flex: 1; display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; overflow: hidden; }
-        #map { height: 100%; width: 100%; border-radius: 28px; z-index: 1; border: 1px solid #e2e8f0; }
-        
-        /* Sidebar com Scroll Interno */
-        .sidebar { background: white; border-radius: 28px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; height: 100%; }
-        .category-scroll { flex: 1; overflow-y: auto; padding: 15px; }
-
-        /* Pins Customizados */
-        .pin-resolvido { background: #10B981; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); width: 28px !important; height: 28px !important; }
-        .pin-aberto { background: #3B82F6; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); width: 28px !important; height: 28px !important; }
-
-        /* Card Popup Estilo Instagram */
-        .leaflet-popup-content-wrapper { border-radius: 24px; padding: 0; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
-        .leaflet-popup-content { margin: 0 !important; width: 280px !important; }
-        .insta-card-img { width: 100%; height: 280px; object-fit: cover; background: #f8fafc; display: block; }
-        
-        /* Estilização de Filtros */
-        .stat-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
-        .stat-card.active { border-color: currentColor; transform: scale(1.02); }
-
-        [v-cloak] { display: none; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CiLi - Dashboard Privado</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --c-bg: #f8fafc;
+      --c-card: #ffffff;
+      --c-border: #e2e8f0;
+      --c-text: #0f172a;
+      --c-muted: #64748b;
+      --c-brand: #0f766e;
+      --c-accent: #22c55e;
+      --c-danger: #dc2626;
+    }
+    body { background: radial-gradient(circle at 20% 0%, #dcfce7 0%, var(--c-bg) 45%); color: var(--c-text); }
+    .card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: 16px; }
+    .btn-primary { background: linear-gradient(135deg, #0f766e, #0891b2); color: #fff; }
+    .btn-secondary { background: #0f172a; color: #fff; }
+    .btn-danger { background: var(--c-danger); color: #fff; }
+    .status-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+    #hotspotMap { height: 420px; border-radius: 14px; }
+    .table-wrap { max-height: 360px; overflow: auto; }
+    .hidden { display: none; }
+    .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 12px; padding: 10px 12px; }
+    .loading-overlay { background: rgba(15, 23, 42, 0.38); backdrop-filter: blur(2px); }
+    .spinner { width: 38px; height: 38px; border: 4px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 999px; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
-<body class="bg-slate-50">
+<body class="min-h-screen font-sans">
+  <div class="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-black tracking-tight">CiLi <span class="text-emerald-700">Dashboard Privado</span></h1>
+        <p class="text-xs sm:text-sm text-slate-600 font-semibold">Gestao de dados para clientes pagantes (acesso controlado)</p>
+      </div>
+      <div id="sessionBadge" class="hidden card px-4 py-3 text-sm"></div>
+    </header>
 
-<div id="app" v-cloak>
-    <div v-if="!isLoggedIn" class="h-full flex items-center justify-center bg-slate-50">
-        <div class="bg-white p-10 rounded-[40px] shadow-2xl w-full max-w-md text-center border border-slate-100">
-            <div class="mb-8 flex justify-center">
-                <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="100" height="100" rx="28" fill="#10B981"/>
-                    <circle cx="72" cy="28" r="8" fill="#FDE047"/>
-                    <path d="M30 70V35H42V70H30ZM50 70V50H62V70H50Z" fill="white"/>
-                </svg>
-            </div>
-            <h2 class="text-2xl font-black text-slate-800 mb-2">Painel de Acompanhamento</h2>
-            <p class="text-slate-400 text-sm font-bold mb-8 uppercase tracking-widest">Gestão Barretos</p>
-            <div class="space-y-4">
-                <input v-model="loginForm.email" type="email" placeholder="E-mail" class="w-full px-6 py-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 font-medium border border-transparent focus:border-emerald-500 transition-all">
-                <input v-model="loginForm.pass" @keyup.enter="handleLogin" type="password" placeholder="Senha" class="w-full px-6 py-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 font-medium border border-transparent focus:border-emerald-500 transition-all">
-                <button @click="handleLogin" :disabled="loading" class="w-full bg-slate-900 text-white py-5 rounded-2xl font-black tracking-widest uppercase text-xs hover:bg-slate-800 transition-all">
-                    {{ loading ? 'AUTENTICANDO...' : 'ENTRAR NO SISTEMA' }}
-                </button>
-            </div>
+    <section class="card p-4 sm:p-5 space-y-4">
+      <h2 class="font-extrabold text-slate-800 text-sm uppercase tracking-wide">Acesso</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label class="text-sm">
+          <span class="font-semibold text-slate-700">Supabase URL</span>
+          <input id="sbUrl" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://seu-projeto.supabase.co">
+        </label>
+        <label class="text-sm">
+          <span class="font-semibold text-slate-700">Supabase ANON KEY</span>
+          <input id="sbAnon" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="eyJ...">
+        </label>
+        <label class="text-sm">
+          <span class="font-semibold text-slate-700">E-mail</span>
+          <input id="email" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="admin@prefeitura.gov.br">
+        </label>
+        <label class="text-sm">
+          <span class="font-semibold text-slate-700">Senha</span>
+          <input id="password" type="password" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="********">
+        </label>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="saveConfigBtn" class="btn-secondary rounded-lg px-4 py-2 text-sm font-bold">Salvar Config</button>
+        <button id="loginBtn" class="btn-primary rounded-lg px-4 py-2 text-sm font-bold">Entrar</button>
+        <button id="logoutBtn" class="btn-danger rounded-lg px-4 py-2 text-sm font-bold">Sair</button>
+      </div>
+      <p id="authMsg" class="text-xs text-slate-600"></p>
+    </section>
+
+    <section id="dashboardSection" class="hidden space-y-5">
+      <div id="globalError" class="hidden alert-error text-sm font-semibold"></div>
+
+      <div class="card p-4 sm:p-5 space-y-3">
+        <h2 class="font-extrabold text-slate-800 text-sm uppercase tracking-wide">Filtros</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+          <label class="text-xs font-semibold text-slate-700">De
+            <input id="fromDate" type="date" class="mt-1 w-full border rounded-md px-2 py-2 text-sm">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Ate
+            <input id="toDate" type="date" class="mt-1 w-full border rounded-md px-2 py-2 text-sm">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Cidade
+            <input id="cityFilter" class="mt-1 w-full border rounded-md px-2 py-2 text-sm" placeholder="Barretos">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Bairro
+            <input id="neighborhoodFilter" class="mt-1 w-full border rounded-md px-2 py-2 text-sm" placeholder="Centro">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Categoria ID
+            <input id="categoryFilter" class="mt-1 w-full border rounded-md px-2 py-2 text-sm" placeholder="limpeza_urbana">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Status
+            <input id="statusFilter" class="mt-1 w-full border rounded-md px-2 py-2 text-sm" placeholder="resolvido">
+          </label>
+          <label class="text-xs font-semibold text-slate-700">Serie
+            <select id="bucketFilter" class="mt-1 w-full border rounded-md px-2 py-2 text-sm">
+              <option value="day">Dia</option>
+              <option value="week">Semana</option>
+              <option value="month">Mes</option>
+            </select>
+          </label>
+          <div class="flex items-end gap-2">
+            <button id="refreshBtn" class="btn-primary rounded-md px-3 py-2 text-sm font-bold w-full">Atualizar</button>
+          </div>
         </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <article class="card p-4"><p class="text-xs text-slate-500">Relatos</p><p id="kpiTotal" class="text-2xl font-black">0</p></article>
+        <article class="card p-4"><p class="text-xs text-slate-500">Resolvidos</p><p id="kpiResolved" class="text-2xl font-black text-emerald-700">0</p></article>
+        <article class="card p-4"><p class="text-xs text-slate-500">Pendentes</p><p id="kpiPending" class="text-2xl font-black text-amber-600">0</p></article>
+        <article class="card p-4"><p class="text-xs text-slate-500">Taxa Resolucao</p><p id="kpiRate" class="text-2xl font-black text-cyan-700">0%</p></article>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <section class="card p-4 xl:col-span-2">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-extrabold text-slate-800">Serie Temporal</h3>
+            <span class="text-xs text-slate-500">Relatos x Resolucao</span>
+          </div>
+          <canvas id="seriesChart" height="110"></canvas>
+        </section>
+        <section class="card p-4">
+          <h3 class="font-extrabold text-slate-800 mb-3">SLA</h3>
+          <div class="space-y-1 text-sm">
+            <p>Total: <b id="slaTotal">0</b></p>
+            <p>Resolvidos em 24h: <b id="sla24">0</b></p>
+            <p>Resolvidos em 72h: <b id="sla72">0</b></p>
+            <p>Resolvidos em 7d: <b id="sla7d">0</b></p>
+            <p>Apos 7d: <b id="slaOver7d">0</b></p>
+            <p>Em aberto: <b id="slaUnresolved">0</b></p>
+            <p>% ate 72h: <b id="slaPct72">0%</b></p>
+            <p>% ate 7d: <b id="slaPct7d">0%</b></p>
+          </div>
+        </section>
+      </div>
+
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <article class="card p-4">
+          <h3 class="font-extrabold text-slate-800 mb-2">Breakdown por Categoria</h3>
+          <div class="table-wrap">
+            <table class="w-full text-sm">
+              <thead class="sticky top-0 bg-white">
+                <tr class="text-left text-slate-500">
+                  <th class="py-2">Dimensao</th>
+                  <th class="py-2">Total</th>
+                  <th class="py-2">Taxa</th>
+                  <th class="py-2">Apoios</th>
+                  <th class="py-2">Comentarios</th>
+                </tr>
+              </thead>
+              <tbody id="breakdownBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card p-4">
+          <h3 class="font-extrabold text-slate-800 mb-2">Hotspots (Mapa)</h3>
+          <div id="hotspotMap"></div>
+        </article>
+      </section>
+
+      <section class="card p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+          <h3 class="font-extrabold text-slate-800">Relatos Filtrados</h3>
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-semibold text-slate-700">Por pagina
+              <select id="pageSizeSelect" class="border rounded-md px-2 py-1 text-xs">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </label>
+            <button id="exportCsvBtn" class="btn-secondary rounded-md px-3 py-2 text-xs font-bold">Exportar CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-white">
+              <tr class="text-left text-slate-500">
+                <th class="py-2">ID</th>
+                <th class="py-2">Data</th>
+                <th class="py-2">Cidade</th>
+                <th class="py-2">Categoria</th>
+                <th class="py-2">Status</th>
+                <th class="py-2">Apoios</th>
+                <th class="py-2">Comentarios</th>
+              </tr>
+            </thead>
+            <tbody id="reportsBody"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3">
+          <p id="pageInfo" class="text-xs text-slate-600 font-semibold">Pagina 1</p>
+          <div class="flex gap-2">
+            <button id="prevPageBtn" class="rounded-md border px-3 py-1 text-xs font-bold">Anterior</button>
+            <button id="nextPageBtn" class="rounded-md border px-3 py-1 text-xs font-bold">Proxima</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card p-4 space-y-2">
+        <h3 class="font-extrabold text-slate-800">Consulta de Protocolo</h3>
+        <div class="flex gap-2">
+          <input id="protocolInput" class="w-full border rounded-md px-3 py-2 text-sm" placeholder="UUID do relato">
+          <button id="protocolBtn" class="btn-primary rounded-md px-3 py-2 text-sm font-bold">Consultar</button>
+        </div>
+        <pre id="protocolOutput" class="bg-slate-900 text-green-300 rounded-md p-3 text-xs overflow-auto">Sem consulta.</pre>
+      </section>
+    </section>
+  </div>
+
+  <div id="loadingOverlay" class="hidden loading-overlay fixed inset-0 z-50 items-center justify-center">
+    <div class="flex flex-col items-center gap-3">
+      <div class="spinner"></div>
+      <p class="text-white font-bold text-sm tracking-wide">Carregando dados...</p>
     </div>
+  </div>
 
-    <template v-else>
-        <header class="px-8 py-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0 z-10 shadow-sm">
-            <div class="flex items-center gap-5">
-                <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white font-black text-xl">Ci</div>
-                <div class="h-8 w-[1px] bg-slate-200"></div>
-                <h1 class="font-black text-slate-800 tracking-tighter text-xl uppercase">PAINEL DE ACOMPANHAMENTO <span class="text-emerald-500 font-black">CiLi</span></h1>
-            </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const LS_CONFIG_KEY = "cili_dashboard_private_config_v1";
+    const state = {
+      sb: null,
+      session: null,
+      charts: { series: null },
+      map: null,
+      hotspotLayer: null,
+      reports: [],
+      loading: false,
+      reportsPage: 0,
+      reportsPageSize: 50,
+      hasNextPage: false
+    };
 
-            <div class="flex items-center gap-6">
-                <div class="flex gap-3">
-                    <div @click="statusFilter = 'all'" :class="['stat-card px-5 py-2 rounded-2xl bg-slate-100 text-slate-600', statusFilter === 'all' ? 'active' : '']">
-                        <p class="text-[9px] font-black uppercase tracking-widest">Total</p>
-                        <p class="text-xl font-black leading-none">{{ reports.length }}</p>
-                    </div>
-                    <div @click="statusFilter = 'resolvido'" :class="['stat-card px-5 py-2 rounded-2xl bg-emerald-50 text-emerald-600', statusFilter === 'resolvido' ? 'active' : '']">
-                        <p class="text-[9px] font-black uppercase tracking-widest">Resolvidos</p>
-                        <p class="text-xl font-black leading-none">{{ stats.resolvidos }}</p>
-                    </div>
-                    <div @click="statusFilter = 'aberto'" :class="['stat-card px-5 py-2 rounded-2xl bg-blue-50 text-blue-600', statusFilter === 'aberto' ? 'active' : '']">
-                        <p class="text-[9px] font-black uppercase tracking-widest">Em Aberto</p>
-                        <p class="text-xl font-black leading-none">{{ stats.abertos }}</p>
-                    </div>
-                </div>
-                <button @click="handleLogout" class="bg-slate-100 p-3 rounded-xl text-slate-400 hover:text-red-500 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                </button>
-            </div>
-        </header>
+    const el = (id) => document.getElementById(id);
+    const setText = (id, value) => { el(id).textContent = String(value ?? ""); };
 
-        <main class="main-content">
-            <aside class="sidebar">
-                <div class="p-6 border-b border-slate-50 bg-white">
-                    <h3 class="font-black text-slate-400 text-[10px] uppercase tracking-[2px]">Categorias de Auditoria</h3>
-                </div>
-                <div class="category-scroll">
-                    <button @click="filterCategory = 'all'" :class="filterCategory === 'all' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center px-5 py-4 rounded-2xl transition-all mb-3">
-                        <span class="font-bold text-sm">Todas as ocorrências</span>
-                    </button>
-                    
-                    <button v-for="(label, id) in categoryConfig" :key="id" 
-                        @click="filterCategory = id" 
-                        :class="filterCategory === id ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'"
-                        class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all mb-2">
-                        <div :class="filterCategory === id ? 'bg-white/20' : 'bg-emerald-50'" class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
-                            <span class="text-xl">{{ getEmoji(id) }}</span>
-                        </div>
-                        <span class="font-bold text-[13px] text-left leading-tight flex-1">{{ label }}</span>
-                    </button>
-                </div>
-            </aside>
+    function nowIsoDate() {
+      return new Date().toISOString().slice(0, 10);
+    }
 
-            <section class="relative">
-                <div id="map"></div>
-                <div class="absolute top-6 left-6 z-[1000] bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex border border-white">
-                    <input v-model="searchId" type="text" placeholder="ID ou Protocolo..." class="px-5 py-3 text-sm outline-none w-56 font-bold bg-transparent">
-                    <button @click="checkProtocol" class="bg-slate-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-600 transition-colors">BUSCAR</button>
-                </div>
-            </section>
-        </main>
-    </template>
-</div>
+    function thirtyDaysAgoIsoDate() {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return d.toISOString().slice(0, 10);
+    }
 
-<script>
-    const { createApp } = Vue;
-    // Credenciais extraídas do seu código enviado
-    const _supabase = supabase.createClient('https://ngjuarfnlepwmvzmkukw.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nanVhcmZubGVwd212em1rdWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMjI4NzcsImV4cCI6MjA4NDY5ODg3N30.w67LAEv_D6dn-N2IIGEBKbniwWNdDe7IuBEWptsEqC0');
+    function loadSavedConfig() {
+      try {
+        const raw = localStorage.getItem(LS_CONFIG_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (_e) {
+        return null;
+      }
+    }
 
-    createApp({
-        data() {
-            return {
-                isLoggedIn: false,
-                loading: false,
-                loginForm: { email: '', pass: '' },
-                map: null,
-                reports: [],
-                markers: [],
-                filterCategory: 'all',
-                statusFilter: 'all',
-                searchId: '',
-                categoryConfig: {
-                    "pavi_vias": "Pavimentação e Vias",
-                    "limpeza_urbana": "Limpeza Urbana",
-                    "ilum_pub": "Iluminação Pública",
-                    "sinal_transito": "Sinalização e Trânsito",
-                    "areas_verdes": "Áreas Verdes",
-                    "poluicao_amb": "Poluição Ambiental",
-                    "saneamento": "Saneamento",
-                    "mobilidade_urb": "Mobilidade Urbana",
-                    "equip_pub": "Equipamentos Públicos",
-                    "seg_pub": "Segurança Pública"
-                }
-            }
+    function saveConfig() {
+      const cfg = {
+        url: el("sbUrl").value.trim(),
+        anon: el("sbAnon").value.trim(),
+        email: el("email").value.trim()
+      };
+      localStorage.setItem(LS_CONFIG_KEY, JSON.stringify(cfg));
+      setAuthMessage("Configuracao salva no navegador.");
+      return cfg;
+    }
+
+    function setAuthMessage(msg, isError = false) {
+      const target = el("authMsg");
+      target.textContent = msg;
+      target.className = isError ? "text-xs text-red-700 font-semibold" : "text-xs text-slate-600";
+    }
+
+    function setGlobalError(msg) {
+      const box = el("globalError");
+      if (!msg) {
+        box.classList.add("hidden");
+        box.textContent = "";
+        return;
+      }
+      box.textContent = msg;
+      box.classList.remove("hidden");
+    }
+
+    function setLoading(isLoading) {
+      state.loading = isLoading;
+      const overlay = el("loadingOverlay");
+      if (isLoading) {
+        overlay.classList.remove("hidden");
+        overlay.classList.add("flex");
+      } else {
+        overlay.classList.add("hidden");
+        overlay.classList.remove("flex");
+      }
+
+      [
+        "refreshBtn", "protocolBtn", "exportCsvBtn", "prevPageBtn",
+        "nextPageBtn", "pageSizeSelect"
+      ].forEach((id) => {
+        const node = el(id);
+        if (node) node.disabled = isLoading;
+      });
+    }
+
+    function friendlyError(err) {
+      const msg = (err?.message || String(err || "")).toLowerCase();
+      if (msg.includes("dashboard_access_denied")) return "Acesso negado: usuario sem permissao de dashboard ou assinatura inativa.";
+      if (msg.includes("authentication_required")) return "Sessao invalida. Faca login novamente.";
+      if (msg.includes("invalid_bucket")) return "Filtro de serie temporal invalido.";
+      if (msg.includes("invalid_dimension")) return "Dimensao de analise invalida.";
+      if (msg.includes("failed to fetch") || msg.includes("network")) return "Falha de rede ao consultar o Supabase.";
+      return err?.message || String(err);
+    }
+
+    function toIsoStart(dateStr) {
+      if (!dateStr) return null;
+      return dateStr + "T00:00:00Z";
+    }
+
+    function toIsoEnd(dateStr) {
+      if (!dateStr) return null;
+      return dateStr + "T23:59:59Z";
+    }
+
+    function normalizeFilters() {
+      const city = el("cityFilter").value.trim() || null;
+      const neighborhood = el("neighborhoodFilter").value.trim() || null;
+      const category = el("categoryFilter").value.trim() || null;
+      const status = el("statusFilter").value.trim() || null;
+      return {
+        p_from: toIsoStart(el("fromDate").value),
+        p_to: toIsoEnd(el("toDate").value),
+        p_city: city,
+        p_neighborhood: neighborhood,
+        p_category_id: category,
+        p_status: status
+      };
+    }
+
+    function ensureMap() {
+      if (state.map) return;
+      state.map = L.map("hotspotMap").setView([-20.5594, -48.5677], 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(state.map);
+      state.hotspotLayer = L.layerGroup().addTo(state.map);
+    }
+
+    async function rpc(name, args) {
+      const { data, error } = await state.sb.rpc(name, args);
+      if (error) throw error;
+      return data || [];
+    }
+
+    function formatDate(ts) {
+      if (!ts) return "-";
+      const dt = new Date(ts);
+      if (isNaN(dt.getTime())) return "-";
+      return dt.toLocaleDateString("pt-BR");
+    }
+
+    function formatPct(v) {
+      const n = Number(v || 0);
+      return n.toFixed(2) + "%";
+    }
+
+    function renderKpis(kpi) {
+      const row = Array.isArray(kpi) ? kpi[0] : null;
+      setText("kpiTotal", row?.total_reports || 0);
+      setText("kpiResolved", row?.resolved_reports || 0);
+      setText("kpiPending", row?.pending_reports || 0);
+      setText("kpiRate", formatPct(row?.resolution_rate || 0));
+    }
+
+    function renderSla(sla) {
+      const row = Array.isArray(sla) ? sla[0] : null;
+      setText("slaTotal", row?.total_reports || 0);
+      setText("sla24", row?.resolved_24h || 0);
+      setText("sla72", row?.resolved_72h || 0);
+      setText("sla7d", row?.resolved_7d || 0);
+      setText("slaOver7d", row?.resolved_over_7d || 0);
+      setText("slaUnresolved", row?.unresolved_total || 0);
+      setText("slaPct72", formatPct(row?.pct_resolved_72h || 0));
+      setText("slaPct7d", formatPct(row?.pct_resolved_7d || 0));
+    }
+
+    function renderSeries(seriesData) {
+      const labels = seriesData.map((i) => formatDate(i.period_start));
+      const total = seriesData.map((i) => Number(i.total_reports || 0));
+      const resolved = seriesData.map((i) => Number(i.resolved_reports || 0));
+      const pending = seriesData.map((i) => Number(i.pending_reports || 0));
+
+      const ctx = el("seriesChart").getContext("2d");
+      if (state.charts.series) state.charts.series.destroy();
+      state.charts.series = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            { label: "Total", data: total, borderColor: "#0ea5e9", backgroundColor: "rgba(14,165,233,.18)", fill: true, tension: .25 },
+            { label: "Resolvidos", data: resolved, borderColor: "#16a34a", backgroundColor: "rgba(22,163,74,.10)", fill: false, tension: .25 },
+            { label: "Pendentes", data: pending, borderColor: "#f59e0b", backgroundColor: "rgba(245,158,11,.10)", fill: false, tension: .25 }
+          ]
         },
-        computed: {
-            filteredReports() {
-                return this.reports.filter(r => {
-                    const matchCategory = (this.filterCategory === 'all' || r.categoryId === this.filterCategory);
-                    const isResolvido = (r.status || '').toLowerCase() === 'resolvido';
-                    const matchStatus = (this.statusFilter === 'all') || 
-                                       (this.statusFilter === 'resolvido' && isResolvido) || 
-                                       (this.statusFilter === 'aberto' && !isResolvido);
-                    return matchCategory && matchStatus;
-                });
-            },
-            stats() {
-                return {
-                    resolvidos: this.reports.filter(r => (r.status || '').toLowerCase() === 'resolvido').length,
-                    abertos: this.reports.filter(r => (r.status || '').toLowerCase() !== 'resolvido').length
-                }
-            }
-        },
-        watch: {
-            filteredReports: { handler() { this.renderMarkers(); }, deep: true }
-        },
-        async mounted() {
-            const { data: { session } } = await _supabase.auth.getSession();
-            if (session) { this.isLoggedIn = true; this.$nextTick(() => this.initApp()); }
-        },
-        methods: {
-            getEmoji(id) {
-                const emojimap = { "pavi_vias": "🚧", "limpeza_urbana": "🧹", "ilum_pub": "💡", "sinal_transito": "🚥", "areas_verdes": "🌳", "poluicao_amb": "🌫️", "saneamento": "💧", "mobilidade_urb": "🚲", "equip_pub": "🏫", "seg_pub": "🛡️" };
-                return emojimap[id] || "📍";
-            },
-            async handleLogin() {
-                this.loading = true;
-                const { error } = await _supabase.auth.signInWithPassword({ email: this.loginForm.email, password: this.loginForm.pass });
-                if (error) { alert("Credenciais inválidas."); this.loading = false; }
-                else { this.isLoggedIn = true; this.$nextTick(() => this.initApp()); }
-            },
-            handleLogout() { _supabase.auth.signOut(); location.reload(); },
-            initApp() { this.initMap(); this.loadReports(); this.setupRealtime(); },
-            initMap() {
-                if (this.map) return;
-                this.map = L.map('map', { zoomControl: false }).setView([-20.557, -48.567], 14);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(this.map);
-                L.control.zoom({ position: 'bottomright' }).addTo(this.map);
-            },
-            async loadReports() {
-                const { data } = await _supabase.from('public_map_reports').select('*');
-                if (data) { this.reports = data; this.renderMarkers(); }
-            },
-            renderMarkers() {
-                if (!this.map) return;
-                this.markers.forEach(m => this.map.removeLayer(m));
-                this.markers = [];
-
-                this.filteredReports.forEach(r => {
-                    const statusVal = (r.status || '').toLowerCase();
-                    const icon = L.divIcon({
-                        className: 'cili-marker',
-                        html: `<div class="${statusVal === 'resolvido' ? 'pin-resolvido' : 'pin-aberto'}"></div>`,
-                        iconSize: [28, 28],
-                        iconAnchor: [14, 28]
-                    });
-
-                    // LÓGICA DE IMAGEM: Garante URL completa e fallback se falhar
-                    const imgSource = r.image_url || 'https://placehold.co/400x400/f8fafc/64748b?text=Sem+Foto';
-
-                    const marker = L.marker([r.lat, r.lon], { icon }).addTo(this.map);
-                    marker.bindPopup(`
-                        <div class="insta-card">
-                            <img src="${imgSource}" class="insta-card-img" onerror="this.src='https://placehold.co/400x400/f8fafc/64748b?text=Foto+Indisponivel'">
-                            <div class="p-5">
-                                <div class="flex items-center justify-between mb-3">
-                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase ${statusVal === 'resolvido' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}">
-                                        ${r.status || 'Pendente'}
-                                    </span>
-                                    <span class="text-[9px] font-black text-slate-300 tracking-wider">ID: ${r.id.toString().slice(-6).toUpperCase()}</span>
-                                </div>
-                                <h4 class="font-black text-slate-800 text-base leading-tight">${r.categoryLabel}</h4>
-                                <div class="mt-5 pt-3 border-t border-slate-50 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                    <span>${new Date(r.createdAt).toLocaleDateString('pt-BR')}</span>
-                                    <span class="text-emerald-500">Barretos</span>
-                                </div>
-                            </div>
-                        </div>
-                    `);
-                    this.markers.push(marker);
-                });
-            },
-            setupRealtime() {
-                _supabase.channel('db').on('postgres_changes', { event: '*', schema: 'public', table: 'public_map_reports' }, () => this.loadReports()).subscribe();
-            },
-            async checkProtocol() {
-                if(!this.searchId) return;
-                const { data } = await _supabase.from('reports').select('*').ilike('id', `%${this.searchId}%`).single();
-                if(data) alert(`✅ Protocolo Localizado!\nStatus: ${data.status}\nLocal: ${data.addressText}`);
-                else alert("❌ Protocolo não encontrado em nosso banco de dados.");
-            }
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
-    }).mount('#app')
-</script>
+      });
+    }
+
+    function renderBreakdown(rows) {
+      const tbody = el("breakdownBody");
+      tbody.innerHTML = "";
+      if (!rows.length) {
+        tbody.innerHTML = "<tr><td colspan='5' class='py-3 text-slate-500'>Sem dados no filtro atual.</td></tr>";
+        return;
+      }
+      rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        tr.className = "border-t";
+        tr.innerHTML = `
+          <td class="py-2 font-semibold">${r.dimension || "Nao informado"}</td>
+          <td class="py-2">${r.total_reports || 0}</td>
+          <td class="py-2">${formatPct(r.resolution_rate || 0)}</td>
+          <td class="py-2">${r.total_supports || 0}</td>
+          <td class="py-2">${r.total_comments || 0}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderReports(rows) {
+      state.reports = rows || [];
+      const tbody = el("reportsBody");
+      tbody.innerHTML = "";
+      if (!rows.length) {
+        tbody.innerHTML = "<tr><td colspan='7' class='py-3 text-slate-500'>Sem registros.</td></tr>";
+        return;
+      }
+      rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        tr.className = "border-t";
+        tr.innerHTML = `
+          <td class="py-2 font-mono text-xs">${r.id || ""}</td>
+          <td class="py-2">${formatDate(r.created_at)}</td>
+          <td class="py-2">${r.city || "-"}</td>
+          <td class="py-2">${r.category_label || r.category_id || "-"}</td>
+          <td class="py-2">${r.status || "-"}</td>
+          <td class="py-2">${r.supports_count || 0}</td>
+          <td class="py-2">${r.comments_count || 0}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      updatePaginationUI();
+    }
+
+    function renderHotspots(rows) {
+      ensureMap();
+      state.hotspotLayer.clearLayers();
+      if (!rows.length) return;
+
+      const latlngs = [];
+      rows.forEach((h) => {
+        const lat = Number(h.lat_bin);
+        const lon = Number(h.lon_bin);
+        if (!isFinite(lat) || !isFinite(lon)) return;
+        latlngs.push([lat, lon]);
+        const intensity = Math.max(0.15, Math.min(0.85, Number(h.total_reports || 1) / 30));
+        const radius = 250 + (Number(h.total_reports || 1) * 20);
+        L.circle([lat, lon], {
+          radius,
+          color: "#dc2626",
+          weight: 1,
+          fillColor: "#ef4444",
+          fillOpacity: intensity
+        }).bindPopup(`
+          <b>Hotspot</b><br>
+          Total: ${h.total_reports || 0}<br>
+          Pendentes: ${h.pending_reports || 0}<br>
+          Resolvidos: ${h.resolved_reports || 0}
+        `).addTo(state.hotspotLayer);
+      });
+      if (latlngs.length) state.map.fitBounds(latlngs, { padding: [20, 20] });
+    }
+
+    function toCsvValue(v) {
+      const s = String(v ?? "");
+      if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+        return "\"" + s.replaceAll("\"", "\"\"") + "\"";
+      }
+      return s;
+    }
+
+    function exportReportsCsv() {
+      const rows = state.reports || [];
+      if (!rows.length) {
+        alert("Nao ha dados para exportar.");
+        return;
+      }
+      const columns = ["id", "created_at", "status", "city", "category_id", "category_label", "group_label", "supports_count", "comments_count"];
+      const lines = [columns.join(",")];
+      rows.forEach((r) => {
+        lines.push(columns.map((c) => toCsvValue(r[c])).join(","));
+      });
+      const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cili-dashboard-relatos.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function updatePaginationUI() {
+      const page = state.reportsPage + 1;
+      setText("pageInfo", `Pagina ${page} • ${state.reportsPageSize} por pagina`);
+      el("prevPageBtn").disabled = state.reportsPage === 0 || state.loading;
+      el("nextPageBtn").disabled = !state.hasNextPage || state.loading;
+    }
+
+    async function refreshDashboard(keepPage = false) {
+      if (!state.sb || !state.session) return;
+      if (!keepPage) state.reportsPage = 0;
+      const filters = normalizeFilters();
+      const bucket = el("bucketFilter").value;
+      setGlobalError("");
+      setLoading(true);
+
+      try {
+        const [kpi, series, breakdown, sla, hotspots, reports] = await Promise.all([
+          rpc("dashboard_kpis", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_category_id: filters.p_category_id
+          }),
+          rpc("dashboard_timeseries", {
+            p_bucket: bucket,
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status
+          }),
+          rpc("dashboard_breakdown", {
+            p_dimension: "category",
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status,
+            p_limit: 30
+          }),
+          rpc("dashboard_sla_snapshot", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id
+          }),
+          rpc("dashboard_hotspots", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_precision: 3,
+            p_limit: 200
+          }),
+          rpc("dashboard_reports_list", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status,
+            p_limit: state.reportsPageSize,
+            p_offset: state.reportsPage * state.reportsPageSize
+          })
+        ]);
+
+        renderKpis(kpi);
+        renderSeries(series);
+        renderBreakdown(breakdown);
+        renderSla(sla);
+        renderHotspots(hotspots);
+        state.hasNextPage = (reports?.length || 0) >= state.reportsPageSize;
+        renderReports(reports);
+      } catch (e) {
+        setGlobalError("Falha ao carregar dashboard: " + friendlyError(e));
+      } finally {
+        setLoading(false);
+        updatePaginationUI();
+      }
+    }
+
+    async function protocolLookup() {
+      const id = el("protocolInput").value.trim();
+      if (!id) return;
+      setLoading(true);
+      try {
+        const data = await rpc("dashboard_protocol_lookup", { p_report_id: id });
+        if (!data.length) {
+          el("protocolOutput").textContent = "Protocolo nao encontrado no escopo permitido.";
+          return;
+        }
+        el("protocolOutput").textContent = JSON.stringify(data[0], null, 2);
+      } catch (e) {
+        el("protocolOutput").textContent = "Erro: " + friendlyError(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function showDashboard(show) {
+      el("dashboardSection").classList.toggle("hidden", !show);
+      el("sessionBadge").classList.toggle("hidden", !show);
+    }
+
+    function setSessionBadge(user) {
+      el("sessionBadge").innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="status-dot bg-emerald-500"></span>
+          <span class="font-semibold">Sessao ativa:</span>
+          <span>${user?.email || "usuario"}</span>
+        </div>`;
+    }
+
+    function createClient() {
+      const url = el("sbUrl").value.trim();
+      const anon = el("sbAnon").value.trim();
+      if (!url || !anon) {
+        throw new Error("Informe Supabase URL e ANON KEY.");
+      }
+      state.sb = window.supabase.createClient(url, anon);
+    }
+
+    async function login() {
+      try {
+        createClient();
+        const email = el("email").value.trim();
+        const password = el("password").value;
+        if (!email || !password) throw new Error("Informe e-mail e senha.");
+
+        const { data, error } = await state.sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        state.session = data.session;
+        setSessionBadge(data.user);
+        showDashboard(true);
+        setAuthMessage("Autenticado com sucesso.");
+        setGlobalError("");
+        await refreshDashboard();
+      } catch (e) {
+        setAuthMessage("Falha no login: " + friendlyError(e), true);
+      }
+    }
+
+    async function restoreSession() {
+      const cfg = loadSavedConfig();
+      if (!cfg?.url || !cfg?.anon) return;
+      el("sbUrl").value = cfg.url;
+      el("sbAnon").value = cfg.anon;
+      if (cfg.email) el("email").value = cfg.email;
+
+      try {
+        createClient();
+        const { data, error } = await state.sb.auth.getSession();
+        if (error || !data.session) return;
+        state.session = data.session;
+        setSessionBadge(data.session.user);
+        showDashboard(true);
+        setAuthMessage("Sessao restaurada.");
+        await refreshDashboard();
+      } catch (_e) {
+        showDashboard(false);
+      }
+    }
+
+    async function logout() {
+      if (!state.sb) return;
+      await state.sb.auth.signOut();
+      state.session = null;
+      showDashboard(false);
+      setAuthMessage("Sessao encerrada.");
+      setGlobalError("");
+    }
+
+    function bindEvents() {
+      el("saveConfigBtn").addEventListener("click", saveConfig);
+      el("loginBtn").addEventListener("click", login);
+      el("logoutBtn").addEventListener("click", logout);
+      el("refreshBtn").addEventListener("click", refreshDashboard);
+      el("protocolBtn").addEventListener("click", protocolLookup);
+      el("exportCsvBtn").addEventListener("click", exportReportsCsv);
+      el("prevPageBtn").addEventListener("click", async () => {
+        if (state.reportsPage === 0) return;
+        state.reportsPage -= 1;
+        await refreshDashboard(true);
+      });
+      el("nextPageBtn").addEventListener("click", async () => {
+        if (!state.hasNextPage) return;
+        state.reportsPage += 1;
+        await refreshDashboard(true);
+      });
+      el("pageSizeSelect").addEventListener("change", async (e) => {
+        const v = Number(e.target.value || 50);
+        state.reportsPageSize = Number.isFinite(v) ? Math.max(10, Math.min(200, v)) : 50;
+        state.reportsPage = 0;
+        await refreshDashboard(true);
+      });
+    }
+
+    function bootstrap() {
+      el("fromDate").value = thirtyDaysAgoIsoDate();
+      el("toDate").value = nowIsoDate();
+      state.reportsPageSize = Number(el("pageSizeSelect").value || 50);
+      bindEvents();
+      updatePaginationUI();
+      restoreSession();
+    }
+
+    bootstrap();
+  </script>
 </body>
 </html>
