@@ -360,6 +360,21 @@
       return data || [];
     }
 
+    async function rpcKpis(args) {
+      try {
+        return await rpc("dashboard_kpis", args);
+      } catch (e) {
+        const msg = (e?.message || String(e || "")).toLowerCase();
+        if (!msg.includes("could not find the function public.dashboard_kpis")) throw e;
+        return await rpc("dashboard_kpis_compat", {
+          p_category_id: args?.p_category_id ?? null,
+          p_city: args?.p_city ?? null,
+          p_from: args?.p_from ?? null,
+          p_to: args?.p_to ?? null
+        });
+      }
+    }
+
     function formatDate(ts) {
       if (!ts) return "-";
       const dt = new Date(ts);
@@ -540,7 +555,7 @@
 
       try {
         const [kpi, series, breakdown, sla, hotspots, reports] = await Promise.all([
-          rpc("dashboard_kpis", {
+          rpcKpis({
             p_from: filters.p_from,
             p_to: filters.p_to,
             p_city: filters.p_city,
