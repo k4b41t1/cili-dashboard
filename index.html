@@ -30,6 +30,14 @@
     .loading-overlay { background: rgba(15, 23, 42, 0.38); backdrop-filter: blur(2px); }
     .spinner { width: 38px; height: 38px; border: 4px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 999px; animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .protocol-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
+    .protocol-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+    .protocol-image { width: 140px; height: 100px; object-fit: cover; border-radius: 10px; background: #e2e8f0; }
+    .protocol-field { margin: 0; font-size: 12px; color: #334155; }
+    .protocol-field b { color: #0f172a; }
+    .protocol-status { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+    .protocol-status.pending { background: #fef3c7; color: #92400e; }
+    .protocol-status.resolved { background: #dcfce7; color: #166534; }
   </style>
 </head>
 <body class="min-h-screen font-sans">
@@ -208,7 +216,7 @@
           <input id="protocolInput" class="w-full border rounded-md px-3 py-2 text-sm" placeholder="UUID do relato">
           <button id="protocolBtn" class="btn-primary rounded-md px-3 py-2 text-sm font-bold">Consultar</button>
         </div>
-        <pre id="protocolOutput" class="bg-slate-900 text-green-300 rounded-md p-3 text-xs overflow-auto">Sem consulta.</pre>
+        <div id="protocolOutput" class="bg-slate-900 text-green-300 rounded-md p-3 text-xs overflow-auto">Sem consulta.</div>
       </section>
     </section>
   </div>
@@ -385,6 +393,53 @@
     function formatPct(v) {
       const n = Number(v || 0);
       return n.toFixed(2) + "%";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll("\"", "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function statusLabel(rawStatus) {
+      const status = String(rawStatus || "").toLowerCase();
+      if (status === "resolvido") return "Resolvido";
+      return "Pendente";
+    }
+
+    function renderProtocolDetails(record) {
+      if (!record) return "Sem consulta.";
+
+      const imageUrl = record.watermarked_uri || record.image_uri || "";
+      const hasImage = /^https?:\/\//i.test(imageUrl);
+      const status = String(record.status || "").toLowerCase();
+      const statusClass = status === "resolvido" ? "resolved" : "pending";
+
+      return `
+        <div class="protocol-card">
+          <div class="protocol-grid">
+            <div>
+              ${
+                hasImage
+                  ? `<img class="protocol-image" src="${escapeHtml(imageUrl)}" alt="Imagem do protocolo">`
+                  : `<div class="protocol-image"></div>`
+              }
+            </div>
+            <div>
+              <p class="protocol-field"><b>Protocolo:</b> ${escapeHtml(record.id)}</p>
+              <p class="protocol-field"><b>Categoria:</b> ${escapeHtml(record.category_label || "-")}</p>
+              <p class="protocol-field"><b>Status:</b> <span class="protocol-status ${statusClass}">${statusLabel(record.status)}</span></p>
+              <p class="protocol-field"><b>Data:</b> ${escapeHtml(formatDate(record.created_at))}</p>
+              <p class="protocol-field"><b>Cidade:</b> ${escapeHtml(record.city || "-")}</p>
+              <p class="protocol-field"><b>Local:</b> ${escapeHtml(record.address_hint || record.address_text || "-")}</p>
+              <p class="protocol-field"><b>Apoios:</b> ${escapeHtml(record.supports_count || 0)} | <b>Comentários:</b> ${escapeHtml(record.comments_count || 0)}</p>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function renderKpis(kpi) {
@@ -632,7 +687,7 @@
           el("protocolOutput").textContent = "Protocolo nao encontrado no escopo permitido.";
           return;
         }
-        el("protocolOutput").textContent = JSON.stringify(data[0], null, 2);
+        el("protocolOutput").innerHTML = renderProtocolDetails(data[0]);
       } catch (e) {
         el("protocolOutput").textContent = "Erro: " + friendlyError(e);
       } finally {
