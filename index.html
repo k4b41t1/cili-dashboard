@@ -152,13 +152,32 @@
             <p>% ate 72h: <b id="slaPct72">0%</b></p>
             <p>% ate 7d: <b id="slaPct7d">0%</b></p>
           </div>
+          <hr class="my-3 border-slate-200">
+          <h3 class="font-extrabold text-slate-800 mb-2">Satisfacao (1-5)</h3>
+          <div class="space-y-1 text-sm">
+            <p>Respostas: <b id="satTotal">0</b></p>
+            <p>Media geral: <b id="satAvg">0.00</b></p>
+            <p>Tempo: <b id="satSpeed">0.00</b></p>
+            <p>Qualidade: <b id="satQuality">0.00</b></p>
+            <p>Comunicacao: <b id="satComm">0.00</b></p>
+            <p>% positivo (>=4): <b id="satPositive">0%</b></p>
+            <p id="satDist" class="text-xs text-slate-600 font-semibold">1★:0 2★:0 3★:0 4★:0 5★:0</p>
+          </div>
         </section>
       </div>
 
-      <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <article class="card p-4">
-          <h3 class="font-extrabold text-slate-800 mb-2">Breakdown por Categoria</h3>
-          <div class="table-wrap">
+    <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <article class="card p-4 xl:col-span-2">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-extrabold text-slate-800">Evolucao da Satisfacao</h3>
+          <span class="text-xs text-slate-500">Media geral (1-5) e total de respostas</span>
+        </div>
+        <canvas id="satisfactionChart" height="95"></canvas>
+      </article>
+
+      <article class="card p-4">
+        <h3 class="font-extrabold text-slate-800 mb-2">Breakdown por Categoria</h3>
+        <div class="table-wrap">
             <table class="w-full text-sm">
               <thead class="sticky top-0 bg-white">
                 <tr class="text-left text-slate-500">
@@ -255,11 +274,20 @@
     const state = {
       sb: null,
       session: null,
-      charts: { series: null },
+      charts: { series: null, satisfaction: null },
       map: null,
       hotspotLayer: null,
       reports: [],
-      dashboardData: { kpi: [], series: [], breakdown: [], sla: [], hotspots: [] },
+      dashboardData: {
+        kpi: [],
+        series: [],
+        breakdown: [],
+        sla: [],
+        hotspots: [],
+        satisfactionSummary: [],
+        satisfactionDistribution: [],
+        satisfactionSeries: []
+      },
       loading: false,
       reportsPage: 0,
       reportsPageSize: 50,
@@ -403,6 +431,16 @@
       }
     }
 
+    async function rpcOptional(name, args) {
+      try {
+        return await rpc(name, args);
+      } catch (e) {
+        const msg = String(e?.message || "").toLowerCase();
+        if (msg.includes(`could not find the function public.${name}`)) return [];
+        throw e;
+      }
+    }
+
     function formatDate(ts) {
       if (!ts) return "-";
       const dt = new Date(ts);
@@ -497,6 +535,71 @@
       setText("slaUnresolved", row?.unresolved_total || 0);
       setText("slaPct72", formatPct(row?.pct_resolved_72h || 0));
       setText("slaPct7d", formatPct(row?.pct_resolved_7d || 0));
+    }
+
+    function renderSatisfaction(summary, distribution) {
+      const row = Array.isArray(summary) ? summary[0] : null;
+      const fmt = (value) => Number(value || 0).toFixed(2);
+      setText("satTotal", row?.total_feedback || 0);
+      setText("satAvg", fmt(row?.avg_overall));
+      setText("satSpeed", fmt(row?.avg_speed));
+      setText("satQuality", fmt(row?.avg_quality));
+      setText("satComm", fmt(row?.avg_communication));
+      setText("satPositive", formatPct(row?.pct_positive || 0));
+
+      const distMap = new Map();
+      (distribution || []).forEach((item) => {
+        distMap.set(Number(item.score), Number(item.total || 0));
+      });
+      const text = [1, 2, 3, 4, 5]
+        .map((score) => `${score}★:${distMap.get(score) || 0}`)
+        .join(" ");
+      setText("satDist", text);
+    }
+
+    function renderSatisfactionSeries(rows) {
+      const data = Array.isArray(rows) ? rows : [];
+      const labels = data.map((i) => formatDate(i.period_start));
+      const avgOverall = data.map((i) => Number(i.avg_overall || 0));
+      const totals = data.map((i) => Number(i.total_feedback || 0));
+
+      const ctx = el("satisfactionChart").getContext("2d");
+      if (state.charts.satisfaction) state.charts.satisfaction.destroy();
+      state.charts.satisfaction = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              type: "line",
+              label: "Media geral (1-5)",
+              data: avgOverall,
+              borderColor: "#7C3AED",
+              backgroundColor: "rgba(124,58,237,.18)",
+              yAxisID: "yAvg",
+              fill: true,
+              tension: 0.25
+            },
+            {
+              type: "bar",
+              label: "Respostas",
+              data: totals,
+              backgroundColor: "rgba(14,165,233,.32)",
+              borderColor: "#0284C7",
+              borderWidth: 1,
+              yAxisID: "yCount"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+          scales: {
+            yAvg: { position: "left", min: 0, max: 5, ticks: { stepSize: 1 } },
+            yCount: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } }
+          }
+        }
+      });
     }
 
     function renderSeries(seriesData) {
@@ -654,6 +757,7 @@
 
       const kpiRow = Array.isArray(state.dashboardData.kpi) ? state.dashboardData.kpi[0] : null;
       const slaRow = Array.isArray(state.dashboardData.sla) ? state.dashboardData.sla[0] : null;
+      const satRow = Array.isArray(state.dashboardData.satisfactionSummary) ? state.dashboardData.satisfactionSummary[0] : null;
       const breakdownRows = Array.isArray(state.dashboardData.breakdown) ? state.dashboardData.breakdown.slice(0, 12) : [];
       const reportsRows = Array.isArray(state.reports) ? state.reports.slice(0, 100) : [];
 
@@ -674,7 +778,8 @@
         `Relatos totais: ${num(kpiRow?.total_reports)}`,
         `Resolvidos: ${num(kpiRow?.resolved_reports)} | Pendentes: ${num(kpiRow?.pending_reports)}`,
         `Taxa de resolucao: ${formatPct(kpiRow?.resolution_rate)}`,
-        `SLA <=72h: ${formatPct(slaRow?.pct_resolved_72h)} | SLA <=7d: ${formatPct(slaRow?.pct_resolved_7d)}`
+        `SLA <=72h: ${formatPct(slaRow?.pct_resolved_72h)} | SLA <=7d: ${formatPct(slaRow?.pct_resolved_7d)}`,
+        `Satisfacao media: ${Number(satRow?.avg_overall || 0).toFixed(2)} | % positivo (>=4): ${formatPct(satRow?.pct_positive || 0)}`
       ];
       doc.text(summaryLines, 14, 42);
 
@@ -683,6 +788,7 @@
         ["IRM", "Resolvidos / Total * 100", "Disponivel (status + reports)"],
         ["TMA", "Media do tempo ate resolucao", "Disponivel (created_at/status_date)"],
         ["SLA 72h / 7d", "% dentro da janela", "Disponivel (dashboard_sla_snapshot)"],
+        ["ISC (1-5)", "Media de satisfacao do cidadao", "Disponivel (report_resolution_feedback)"],
         ["Densidade de problemas", "Relatos por area/bairro", "Parcial (hotspots e cidade/bairro)"],
         ["Engajamento civico", "Apoios e comentarios por relato", "Disponivel (supports/comments)"]
       ];
@@ -753,7 +859,7 @@
       setLoading(true);
 
       try {
-        const [kpi, series, breakdown, sla, hotspots, reports] = await Promise.all([
+        const [kpi, series, breakdown, sla, hotspots, reports, satisfactionSummary, satisfactionDistribution, satisfactionSeries] = await Promise.all([
           rpcKpis({
             p_from: filters.p_from,
             p_to: filters.p_to,
@@ -803,6 +909,31 @@
             p_status: filters.p_status,
             p_limit: state.reportsPageSize,
             p_offset: state.reportsPage * state.reportsPageSize
+          }),
+          rpcOptional("dashboard_satisfaction_summary", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status
+          }),
+          rpcOptional("dashboard_satisfaction_distribution", {
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status
+          }),
+          rpcOptional("dashboard_satisfaction_timeseries", {
+            p_bucket: bucket,
+            p_from: filters.p_from,
+            p_to: filters.p_to,
+            p_city: filters.p_city,
+            p_neighborhood: filters.p_neighborhood,
+            p_category_id: filters.p_category_id,
+            p_status: filters.p_status
           })
         ]);
 
@@ -810,8 +941,19 @@
         renderSeries(series);
         renderBreakdown(breakdown);
         renderSla(sla);
+        renderSatisfaction(satisfactionSummary, satisfactionDistribution);
+        renderSatisfactionSeries(satisfactionSeries);
         renderHotspots(hotspots);
-        state.dashboardData = { kpi, series, breakdown, sla, hotspots };
+        state.dashboardData = {
+          kpi,
+          series,
+          breakdown,
+          sla,
+          hotspots,
+          satisfactionSummary,
+          satisfactionDistribution,
+          satisfactionSeries
+        };
         state.hasNextPage = (reports?.length || 0) >= state.reportsPageSize;
         renderReports(reports);
       } catch (e) {
