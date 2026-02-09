@@ -41,8 +41,13 @@
     .protocol-status.resolved { background: #dcfce7; color: #166534; }
     .protocol-modal { position: fixed; inset: 0; z-index: 60; background: rgba(2, 6, 23, 0.75); display: none; align-items: center; justify-content: center; padding: 20px; }
     .protocol-modal.show { display: flex; }
-    .protocol-modal-content { position: relative; max-width: min(96vw, 1400px); max-height: 92vh; }
-    .protocol-modal-image { max-width: 100%; max-height: 90vh; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); }
+    .protocol-modal-content { position: relative; max-width: min(96vw, 1400px); max-height: 92vh; display: flex; flex-direction: column; gap: 10px; }
+    .protocol-modal-stage { width: min(94vw, 1360px); height: min(82vh, 920px); border-radius: 12px; border: 1px solid rgba(255,255,255,.25); overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.25); }
+    .protocol-modal-image { max-width: 100%; max-height: 100%; border-radius: 10px; transform-origin: center center; user-select: none; -webkit-user-drag: none; cursor: zoom-in; }
+    .protocol-modal-image.zoomed { cursor: grab; }
+    .protocol-modal-image.dragging { cursor: grabbing; }
+    .protocol-modal-toolbar { display: flex; justify-content: center; gap: 8px; }
+    .protocol-modal-tool { min-width: 38px; height: 34px; border-radius: 999px; border: 0; background: #ffffff; color: #0f172a; font-weight: 800; cursor: pointer; }
     .protocol-modal-close { position: absolute; top: -12px; right: -12px; width: 34px; height: 34px; border-radius: 999px; border: 0; background: #ffffff; color: #0f172a; font-size: 22px; line-height: 1; cursor: pointer; }
     @media (max-width: 768px) {
       .protocol-grid { grid-template-columns: 1fr; }
@@ -258,9 +263,16 @@
     </div>
   </div>
   <div id="protocolImageModal" class="protocol-modal" aria-hidden="true">
-    <div class="protocol-modal-content">
+    <div id="protocolImageModalContent" class="protocol-modal-content">
       <button id="protocolImageModalClose" class="protocol-modal-close" type="button" aria-label="Fechar imagem">&times;</button>
-      <img id="protocolImageModalImg" class="protocol-modal-image" src="" alt="Imagem ampliada do protocolo">
+      <div id="protocolImageModalStage" class="protocol-modal-stage">
+        <img id="protocolImageModalImg" class="protocol-modal-image" src="" alt="Imagem ampliada do protocolo">
+      </div>
+      <div class="protocol-modal-toolbar" aria-label="Ferramentas de zoom da imagem">
+        <button id="protocolImageZoomOut" class="protocol-modal-tool" type="button" aria-label="Diminuir zoom">-</button>
+        <button id="protocolImageZoomReset" class="protocol-modal-tool" type="button" aria-label="Resetar zoom">100%</button>
+        <button id="protocolImageZoomIn" class="protocol-modal-tool" type="button" aria-label="Aumentar zoom">+</button>
+      </div>
     </div>
   </div>
 
@@ -468,10 +480,77 @@
       return "Pendente";
     }
 
+    const protocolImageZoom = {
+      scale: 1,
+      minScale: 1,
+      maxScale: 4,
+      x: 0,
+      y: 0,
+      dragging: false,
+      lastX: 0,
+      lastY: 0,
+      pinchDistance: null,
+      pinchStartScale: 1
+    };
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function clampProtocolImagePan() {
+      const img = el("protocolImageModalImg");
+      const stage = el("protocolImageModalStage");
+      const stageWidth = stage.clientWidth || 0;
+      const stageHeight = stage.clientHeight || 0;
+      const maxX = Math.max(0, ((img.clientWidth * protocolImageZoom.scale) - stageWidth) / 2);
+      const maxY = Math.max(0, ((img.clientHeight * protocolImageZoom.scale) - stageHeight) / 2);
+      protocolImageZoom.x = clamp(protocolImageZoom.x, -maxX, maxX);
+      protocolImageZoom.y = clamp(protocolImageZoom.y, -maxY, maxY);
+    }
+
+    function applyProtocolImageTransform() {
+      const img = el("protocolImageModalImg");
+      clampProtocolImagePan();
+      img.style.transform = `translate(${protocolImageZoom.x}px, ${protocolImageZoom.y}px) scale(${protocolImageZoom.scale})`;
+      img.classList.toggle("zoomed", protocolImageZoom.scale > 1);
+    }
+
+    function resetProtocolImageZoom() {
+      protocolImageZoom.scale = 1;
+      protocolImageZoom.x = 0;
+      protocolImageZoom.y = 0;
+      protocolImageZoom.dragging = false;
+      protocolImageZoom.pinchDistance = null;
+      applyProtocolImageTransform();
+    }
+
+    function setProtocolImageZoom(nextScale) {
+      const oldScale = protocolImageZoom.scale;
+      const scale = clamp(nextScale, protocolImageZoom.minScale, protocolImageZoom.maxScale);
+      if (Math.abs(scale - oldScale) < 0.001) return;
+      const ratio = scale / oldScale;
+      protocolImageZoom.scale = scale;
+      protocolImageZoom.x *= ratio;
+      protocolImageZoom.y *= ratio;
+      if (scale <= 1) {
+        protocolImageZoom.x = 0;
+        protocolImageZoom.y = 0;
+      }
+      applyProtocolImageTransform();
+    }
+
+    function protocolTouchDistance(touches) {
+      if (!touches || touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    }
+
     function openProtocolImageModal(imageUrl) {
       if (!imageUrl) return;
       const modal = el("protocolImageModal");
       const img = el("protocolImageModalImg");
+      resetProtocolImageZoom();
       img.src = imageUrl;
       modal.classList.add("show");
       modal.setAttribute("aria-hidden", "false");
@@ -482,6 +561,8 @@
       const img = el("protocolImageModalImg");
       modal.classList.remove("show");
       modal.setAttribute("aria-hidden", "true");
+      resetProtocolImageZoom();
+      img.classList.remove("dragging");
       img.src = "";
     }
 
@@ -499,7 +580,7 @@
             <div>
               ${
                 hasImage
-                  ? `<img class="protocol-image" src="${escapeHtml(imageUrl)}" data-full-src="${escapeHtml(imageUrl)}" alt="Imagem do protocolo"><p class="protocol-image-hint">Clique para ampliar</p>`
+                  ? `<img class="protocol-image" src="${escapeHtml(imageUrl)}" data-full-src="${escapeHtml(imageUrl)}" alt="Imagem do protocolo"><p class="protocol-image-hint">Clique para ampliar. No modal: use +/-, roda do mouse ou pinça.</p>`
                   : `<div class="protocol-image"></div>`
               }
             </div>
@@ -1109,6 +1190,85 @@
       });
 
       el("protocolImageModalClose").addEventListener("click", closeProtocolImageModal);
+      el("protocolImageZoomIn").addEventListener("click", () => setProtocolImageZoom(protocolImageZoom.scale + 0.25));
+      el("protocolImageZoomOut").addEventListener("click", () => setProtocolImageZoom(protocolImageZoom.scale - 0.25));
+      el("protocolImageZoomReset").addEventListener("click", resetProtocolImageZoom);
+      el("protocolImageModalImg").addEventListener("dblclick", () => {
+        if (protocolImageZoom.scale <= 1) setProtocolImageZoom(2);
+        else resetProtocolImageZoom();
+      });
+      el("protocolImageModalImg").addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? 0.2 : -0.2;
+        setProtocolImageZoom(protocolImageZoom.scale + delta);
+      }, { passive: false });
+      el("protocolImageModalImg").addEventListener("mousedown", (event) => {
+        if (protocolImageZoom.scale <= 1) return;
+        protocolImageZoom.dragging = true;
+        protocolImageZoom.lastX = event.clientX;
+        protocolImageZoom.lastY = event.clientY;
+        el("protocolImageModalImg").classList.add("dragging");
+      });
+      document.addEventListener("mousemove", (event) => {
+        if (!protocolImageZoom.dragging) return;
+        const dx = event.clientX - protocolImageZoom.lastX;
+        const dy = event.clientY - protocolImageZoom.lastY;
+        protocolImageZoom.lastX = event.clientX;
+        protocolImageZoom.lastY = event.clientY;
+        protocolImageZoom.x += dx;
+        protocolImageZoom.y += dy;
+        applyProtocolImageTransform();
+      });
+      document.addEventListener("mouseup", () => {
+        if (!protocolImageZoom.dragging) return;
+        protocolImageZoom.dragging = false;
+        el("protocolImageModalImg").classList.remove("dragging");
+      });
+      el("protocolImageModalStage").addEventListener("touchstart", (event) => {
+        if (event.touches.length === 2) {
+          protocolImageZoom.pinchDistance = protocolTouchDistance(event.touches);
+          protocolImageZoom.pinchStartScale = protocolImageZoom.scale;
+          protocolImageZoom.dragging = false;
+          el("protocolImageModalImg").classList.remove("dragging");
+          return;
+        }
+        if (event.touches.length === 1 && protocolImageZoom.scale > 1) {
+          protocolImageZoom.dragging = true;
+          protocolImageZoom.lastX = event.touches[0].clientX;
+          protocolImageZoom.lastY = event.touches[0].clientY;
+          el("protocolImageModalImg").classList.add("dragging");
+        }
+      }, { passive: true });
+      el("protocolImageModalStage").addEventListener("touchmove", (event) => {
+        if (event.touches.length === 2 && protocolImageZoom.pinchDistance) {
+          event.preventDefault();
+          const distance = protocolTouchDistance(event.touches);
+          if (distance > 0) {
+            const ratio = distance / protocolImageZoom.pinchDistance;
+            setProtocolImageZoom(protocolImageZoom.pinchStartScale * ratio);
+          }
+          return;
+        }
+        if (event.touches.length === 1 && protocolImageZoom.dragging) {
+          event.preventDefault();
+          const nextX = event.touches[0].clientX;
+          const nextY = event.touches[0].clientY;
+          const dx = nextX - protocolImageZoom.lastX;
+          const dy = nextY - protocolImageZoom.lastY;
+          protocolImageZoom.lastX = nextX;
+          protocolImageZoom.lastY = nextY;
+          protocolImageZoom.x += dx;
+          protocolImageZoom.y += dy;
+          applyProtocolImageTransform();
+        }
+      }, { passive: false });
+      el("protocolImageModalStage").addEventListener("touchend", (event) => {
+        if (event.touches.length < 2) protocolImageZoom.pinchDistance = null;
+        if (event.touches.length === 0) {
+          protocolImageZoom.dragging = false;
+          el("protocolImageModalImg").classList.remove("dragging");
+        }
+      });
       el("protocolImageModal").addEventListener("click", (event) => {
         if (event.target === el("protocolImageModal")) closeProtocolImageModal();
       });
