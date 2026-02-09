@@ -31,13 +31,23 @@
     .spinner { width: 38px; height: 38px; border: 4px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 999px; animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .protocol-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
-    .protocol-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
-    .protocol-image { width: 140px; height: 100px; object-fit: cover; border-radius: 10px; background: #e2e8f0; }
+    .protocol-grid { display: grid; grid-template-columns: 320px 1fr; gap: 14px; }
+    .protocol-image { width: 320px; height: 240px; object-fit: cover; border-radius: 10px; background: #e2e8f0; cursor: zoom-in; }
+    .protocol-image-hint { margin-top: 6px; font-size: 10px; color: #64748b; font-weight: 600; }
     .protocol-field { margin: 0; font-size: 12px; color: #334155; }
     .protocol-field b { color: #0f172a; }
     .protocol-status { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
     .protocol-status.pending { background: #fef3c7; color: #92400e; }
     .protocol-status.resolved { background: #dcfce7; color: #166534; }
+    .protocol-modal { position: fixed; inset: 0; z-index: 60; background: rgba(2, 6, 23, 0.75); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .protocol-modal.show { display: flex; }
+    .protocol-modal-content { position: relative; max-width: min(96vw, 1400px); max-height: 92vh; }
+    .protocol-modal-image { max-width: 100%; max-height: 90vh; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); }
+    .protocol-modal-close { position: absolute; top: -12px; right: -12px; width: 34px; height: 34px; border-radius: 999px; border: 0; background: #ffffff; color: #0f172a; font-size: 22px; line-height: 1; cursor: pointer; }
+    @media (max-width: 768px) {
+      .protocol-grid { grid-template-columns: 1fr; }
+      .protocol-image { width: 100%; height: 200px; }
+    }
   </style>
 </head>
 <body class="min-h-screen font-sans">
@@ -227,6 +237,12 @@
       <p class="text-white font-bold text-sm tracking-wide">Carregando dados...</p>
     </div>
   </div>
+  <div id="protocolImageModal" class="protocol-modal" aria-hidden="true">
+    <div class="protocol-modal-content">
+      <button id="protocolImageModalClose" class="protocol-modal-close" type="button" aria-label="Fechar imagem">&times;</button>
+      <img id="protocolImageModalImg" class="protocol-modal-image" src="" alt="Imagem ampliada do protocolo">
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -410,6 +426,23 @@
       return "Pendente";
     }
 
+    function openProtocolImageModal(imageUrl) {
+      if (!imageUrl) return;
+      const modal = el("protocolImageModal");
+      const img = el("protocolImageModalImg");
+      img.src = imageUrl;
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeProtocolImageModal() {
+      const modal = el("protocolImageModal");
+      const img = el("protocolImageModalImg");
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      img.src = "";
+    }
+
     function renderProtocolDetails(record) {
       if (!record) return "Sem consulta.";
 
@@ -424,7 +457,7 @@
             <div>
               ${
                 hasImage
-                  ? `<img class="protocol-image" src="${escapeHtml(imageUrl)}" alt="Imagem do protocolo">`
+                  ? `<img class="protocol-image" src="${escapeHtml(imageUrl)}" data-full-src="${escapeHtml(imageUrl)}" alt="Imagem do protocolo"><p class="protocol-image-hint">Clique para ampliar</p>`
                   : `<div class="protocol-image"></div>`
               }
             </div>
@@ -791,6 +824,23 @@
         state.reportsPage = 0;
         await refreshDashboard(true);
       });
+
+      el("protocolOutput").addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const imageNode = target.closest("[data-full-src]");
+        if (!(imageNode instanceof HTMLElement)) return;
+        const imageUrl = imageNode.getAttribute("data-full-src");
+        if (imageUrl) openProtocolImageModal(imageUrl);
+      });
+
+      el("protocolImageModalClose").addEventListener("click", closeProtocolImageModal);
+      el("protocolImageModal").addEventListener("click", (event) => {
+        if (event.target === el("protocolImageModal")) closeProtocolImageModal();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeProtocolImageModal();
+      });
     }
 
     function bootstrap() {
@@ -806,3 +856,4 @@
   </script>
 </body>
 </html>
+
