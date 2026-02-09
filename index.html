@@ -661,7 +661,16 @@
         const tr = document.createElement("tr");
         tr.className = "border-t";
         tr.innerHTML = `
-          <td class="py-2 font-mono text-xs">${r.id || ""}</td>
+          <td class="py-2 font-mono text-xs">
+            <button
+              type="button"
+              class="text-cyan-700 hover:text-cyan-900 hover:underline font-semibold text-left"
+              data-report-id="${r.id || ""}"
+              title="Consultar protocolo"
+            >
+              ${r.id || ""}
+            </button>
+          </td>
           <td class="py-2">${formatDate(r.created_at)}</td>
           <td class="py-2">${r.city || "-"}</td>
           <td class="py-2">${r.category_label || r.category_id || "-"}</td>
@@ -964,9 +973,10 @@
       }
     }
 
-    async function protocolLookup() {
-      const id = el("protocolInput").value.trim();
+    async function protocolLookup(reportId = null) {
+      const id = (reportId || el("protocolInput").value || "").trim();
       if (!id) return;
+      el("protocolInput").value = id;
       setLoading(true);
       try {
         const data = await rpc("dashboard_protocol_lookup", { p_report_id: id });
@@ -1078,6 +1088,15 @@
         state.reportsPageSize = Number.isFinite(v) ? Math.max(10, Math.min(200, v)) : 50;
         state.reportsPage = 0;
         await refreshDashboard(true);
+      });
+      el("reportsBody").addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const trigger = target.closest("[data-report-id]");
+        if (!(trigger instanceof HTMLElement)) return;
+        const reportId = trigger.getAttribute("data-report-id");
+        if (!reportId) return;
+        await protocolLookup(reportId);
       });
 
       el("protocolOutput").addEventListener("click", (event) => {
