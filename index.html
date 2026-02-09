@@ -193,6 +193,7 @@
               </select>
             </label>
             <button id="exportCsvBtn" class="btn-secondary rounded-md px-3 py-2 text-xs font-bold">Exportar CSV</button>
+            <button id="exportPdfBtn" class="btn-primary rounded-md px-3 py-2 text-xs font-bold">Exportar PDF</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -247,6 +248,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script>
     const LS_CONFIG_KEY = "cili_dashboard_private_config_v1";
     const state = {
@@ -256,6 +259,7 @@
       map: null,
       hotspotLayer: null,
       reports: [],
+      dashboardData: { kpi: [], series: [], breakdown: [], sla: [], hotspots: [] },
       loading: false,
       reportsPage: 0,
       reportsPageSize: 50,
@@ -325,7 +329,7 @@
       }
 
       [
-        "refreshBtn", "protocolBtn", "exportCsvBtn", "prevPageBtn",
+        "refreshBtn", "protocolBtn", "exportCsvBtn", "exportPdfBtn", "prevPageBtn",
         "nextPageBtn", "pageSizeSelect"
       ].forEach((id) => {
         const node = el(id);
@@ -626,6 +630,113 @@
       URL.revokeObjectURL(url);
     }
 
+    function activeFiltersSummary() {
+      const fromDate = el("fromDate").value || "-";
+      const toDate = el("toDate").value || "-";
+      const city = el("cityFilter").value.trim() || "Todas";
+      const neighborhood = el("neighborhoodFilter").value.trim() || "Todos";
+      const category = el("categoryFilter").value.trim() || "Todas";
+      const status = el("statusFilter").value.trim() || "Todos";
+      return `Periodo: ${fromDate} a ${toDate} | Cidade: ${city} | Bairro: ${neighborhood} | Categoria: ${category} | Status: ${status}`;
+    }
+
+    function num(v) {
+      const n = Number(v || 0);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function exportDashboardPdf() {
+      const jsPDFCtor = window.jspdf?.jsPDF;
+      if (!jsPDFCtor) {
+        alert("Biblioteca de PDF indisponivel. Recarregue a pagina.");
+        return;
+      }
+
+      const kpiRow = Array.isArray(state.dashboardData.kpi) ? state.dashboardData.kpi[0] : null;
+      const slaRow = Array.isArray(state.dashboardData.sla) ? state.dashboardData.sla[0] : null;
+      const breakdownRows = Array.isArray(state.dashboardData.breakdown) ? state.dashboardData.breakdown.slice(0, 12) : [];
+      const reportsRows = Array.isArray(state.reports) ? state.reports.slice(0, 100) : [];
+
+      const doc = new jsPDFCtor({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const generatedAt = new Date().toLocaleString("pt-BR");
+
+      doc.setFontSize(16);
+      doc.text("CiLi - Relatorio de Indicadores", 14, 16);
+      doc.setFontSize(9);
+      doc.text(`Gerado em: ${generatedAt}`, 14, 22);
+      doc.text(activeFiltersSummary(), 14, 27, { maxWidth: pageWidth - 28 });
+
+      doc.setFontSize(11);
+      doc.text("Resumo Executivo", 14, 36);
+      doc.setFontSize(9);
+      const summaryLines = [
+        `Relatos totais: ${num(kpiRow?.total_reports)}`,
+        `Resolvidos: ${num(kpiRow?.resolved_reports)} | Pendentes: ${num(kpiRow?.pending_reports)}`,
+        `Taxa de resolucao: ${formatPct(kpiRow?.resolution_rate)}`,
+        `SLA <=72h: ${formatPct(slaRow?.pct_resolved_72h)} | SLA <=7d: ${formatPct(slaRow?.pct_resolved_7d)}`
+      ];
+      doc.text(summaryLines, 14, 42);
+
+      const indicatorNotes = [
+        ["Indicador", "Formula resumida", "Disponibilidade atual"],
+        ["IRM", "Resolvidos / Total * 100", "Disponivel (status + reports)"],
+        ["TMA", "Media do tempo ate resolucao", "Disponivel (created_at/status_date)"],
+        ["SLA 72h / 7d", "% dentro da janela", "Disponivel (dashboard_sla_snapshot)"],
+        ["Densidade de problemas", "Relatos por area/bairro", "Parcial (hotspots e cidade/bairro)"],
+        ["Engajamento civico", "Apoios e comentarios por relato", "Disponivel (supports/comments)"]
+      ];
+
+      doc.autoTable({
+        startY: 56,
+        head: [indicatorNotes[0]],
+        body: indicatorNotes.slice(1),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [15, 118, 110] }
+      });
+
+      const breakdownBody = breakdownRows.map((r) => [
+        String(r.dimension || "Nao informado"),
+        String(num(r.total_reports)),
+        formatPct(r.resolution_rate),
+        String(num(r.total_supports)),
+        String(num(r.total_comments))
+      ]);
+
+      doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Categoria", "Total", "Taxa", "Apoios", "Comentarios"]],
+        body: breakdownBody.length ? breakdownBody : [["Sem dados", "0", "0.00%", "0", "0"]],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [14, 165, 233] }
+      });
+
+      doc.addPage();
+      doc.setFontSize(11);
+      doc.text("Relatos Filtrados (amostra exportada)", 14, 14);
+
+      const reportsBody = reportsRows.map((r) => [
+        String(r.id || "").slice(0, 22),
+        formatDate(r.created_at),
+        String(r.city || "-"),
+        String(r.category_label || r.category_id || "-"),
+        String(r.status || "-"),
+        String(num(r.supports_count)),
+        String(num(r.comments_count))
+      ]);
+
+      doc.autoTable({
+        startY: 18,
+        head: [["ID", "Data", "Cidade", "Categoria", "Status", "Apoios", "Comentarios"]],
+        body: reportsBody.length ? reportsBody : [["Sem registros", "-", "-", "-", "-", "-", "-"]],
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+
+      const filenameDate = new Date().toISOString().slice(0, 10);
+      doc.save(`cili-relatorio-publico-${filenameDate}.pdf`);
+    }
+
     function updatePaginationUI() {
       const page = state.reportsPage + 1;
       setText("pageInfo", `Pagina ${page} • ${state.reportsPageSize} por pagina`);
@@ -700,6 +811,7 @@
         renderBreakdown(breakdown);
         renderSla(sla);
         renderHotspots(hotspots);
+        state.dashboardData = { kpi, series, breakdown, sla, hotspots };
         state.hasNextPage = (reports?.length || 0) >= state.reportsPageSize;
         renderReports(reports);
       } catch (e) {
@@ -808,6 +920,7 @@
       el("refreshBtn").addEventListener("click", refreshDashboard);
       el("protocolBtn").addEventListener("click", protocolLookup);
       el("exportCsvBtn").addEventListener("click", exportReportsCsv);
+      el("exportPdfBtn").addEventListener("click", exportDashboardPdf);
       el("prevPageBtn").addEventListener("click", async () => {
         if (state.reportsPage === 0) return;
         state.reportsPage -= 1;
@@ -856,4 +969,3 @@
   </script>
 </body>
 </html>
-
